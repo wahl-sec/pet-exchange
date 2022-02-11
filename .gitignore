@@ -1,0 +1,12 @@
+# Python Environment
+venv
+*.egg-info
+**__pycache__**
+*.pyc
+
+# Build Artifacts
+build
+dist
+
+# Other
+trades

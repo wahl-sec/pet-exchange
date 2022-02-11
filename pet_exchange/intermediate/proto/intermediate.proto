@@ -1,0 +1,123 @@
+syntax = "proto3";
+package intermediate;
+
+service IntermediateProto {
+    // Request to generate a public/private key-pair on the Intermediate.
+    //
+    // Returns the public key in the `KeyGenReply` if successful.
+    //
+    // If it fails to generate a key-pair then no public key is returned.
+    rpc KeyGen (KeyGenRequest) returns (KeyGenReply);
+
+    // Request to encrypt an unencrypted order for the given instrument.
+    //
+    // Returns the encrypted order if successful.
+    //
+    // If it fails to encrypt then a suitable status code is returned.
+    rpc EncryptOrder (EncryptOrderRequest) returns (EncryptOrderReply);
+
+    // Request to encrypt an unencrypted order book for the given instrument.
+    //
+    // Reuturns the encrypted order book if successful.
+    //
+    // If it fails to encrypt then a suitable status code is returned.
+    rpc EncryptOrderBook (EncryptOrderBookRequest) returns (EncryptOrderBookReply);
+
+    // Request to decrypt an encrypted order for the given instrument.
+    //
+    // Returns the decrypted order if successful.
+    //
+    // If it fails to decrypt then a suitable status code is returned.
+    rpc DecryptOrder (DecryptOrderRequest) returns (DecryptOrderReply);
+
+    // Request to decrypt an encrypted order book for the given instrument.
+    //
+    // Reuturns the decrypted order book if successful.
+    //
+    // If it fails to decrypt then a suitable status code is returned.
+    rpc DecryptOrderBook (DecryptOrderBookRequest) returns (DecryptOrderBookReply);
+}
+
+// OrderType
+//
+// Enum of valid order types used in encrypted and plaintext orders
+enum OrderType {
+    BID = 0;
+    ASK = 1;
+}
+
+// PlaintextOrder
+//
+// General message structure for a plaintext order to be used in other messages
+message PlaintextOrder {
+    OrderType type = 1;
+    string instrument = 2;
+    uint32 volume = 3;
+    double price = 4;
+}
+
+// PlaintextOrder
+//
+// General message structure for a ciphertext order to be used in other messages
+message CiphertextOrder {
+    OrderType type = 1;
+    string instrument = 2;
+    bytes volume = 3;
+    bytes price = 4;
+}
+
+// KeyGen
+//
+// Request to generate a key-pair connected to the given instrument
+message KeyGenRequest {
+    string instrument = 1;
+}
+
+message KeyGenReply {
+    bytes public = 1;
+    bytes context = 2;
+}
+
+// EncryptOrder
+//
+// Request to encrypt an order using the public key connected to a certain instrument
+message EncryptOrderRequest {
+    PlaintextOrder order = 1;
+}
+
+message EncryptOrderReply {
+    CiphertextOrder order = 1;
+}
+
+// EncryptOrderBook
+//
+// Request to encrypt an order book using the public key connected to a certain instrument
+message EncryptOrderBookRequest {
+    repeated PlaintextOrder order = 1;
+}
+
+message EncryptOrderBookReply {
+    repeated CiphertextOrder order = 1;
+}
+
+// DecryptOrder
+//
+// Request to decrypt an order encrypted by the public key connected to a certain instrument
+message DecryptOrderRequest {
+    CiphertextOrder order = 1;
+}
+
+message DecryptOrderReply {
+    PlaintextOrder order = 1;
+}
+
+// DecryptOrderBook
+//
+// Request to decrypt an order book encrypted by the public key connected to a certain instrument
+message DecryptOrderBookRequest {
+    repeated CiphertextOrder order = 1;
+}
+
+message DecryptOrderBookReply {
+    repeated PlaintextOrder order = 1;
+}

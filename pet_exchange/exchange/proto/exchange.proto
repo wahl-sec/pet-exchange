@@ -1,0 +1,141 @@
+syntax = "proto3";
+package exchange;
+
+service ExchangeProto {
+    // Request to add a new encrypted limit order to the exchange.
+    //
+    // Returns an order UUID if successful.
+    //
+    // If it fails then it will return a suitable error status code.
+    rpc AddOrderLimit (AddOrderLimitRequest) returns (AddOrderLimitReply);
+
+    // Request to add a new unencrypted limit order to the exchange.
+    //
+    // Returns an order UUID if successful.
+    //
+    // If it fails then it will return a suitable error status code.
+    rpc AddOrderLimitPlain (AddOrderLimitPlainRequest) returns (AddOrderLimitPlainReply);
+
+    // Request to add a new encrypted market order to the exchange.
+    //
+    // Returns an order UUID if successful.
+    //
+    // If it fails then it will return a suitable error status code.
+    rpc AddOrderMarket (AddOrderMarketRequest) returns (AddOrderMarketReply);
+
+    // Request to add a new unencrypted market order to the exchange.
+    //
+    // Returns an order UUID if successful.
+    //
+    // If it fails then it will return a suitable error status code.
+    rpc AddOrderMarketPlain (AddOrderMarketPlainRequest) returns (AddOrderMarketPlainReply);
+
+    // Request the public key for a given instrument.
+    //
+    // Returns the public key to use for the instrumetn.
+    //
+    // If it fails then it will return a suitable error status code.
+    rpc GetPublicKey (GetPublicKeyRequest) returns (GetPublicKeyReply);
+}
+
+// OrderType
+//
+// Enum of valid order types used in encrypted and plaintext orders
+enum OrderType {
+    BID = 0;
+    ASK = 1;
+}
+
+// PlaintextLimitOrder
+//
+// General message structure for a plaintext order to be used in other messages
+message PlaintextLimitOrder {
+    OrderType type = 1;
+    string instrument = 2;
+    uint32 volume = 3;
+    double price = 4;
+}
+
+// CiphertextLimitOrder
+//
+// General message structure for a ciphertext order to be used in other messages
+message CiphertextLimitOrder {
+    OrderType type = 1;
+    string instrument = 2;
+    bytes volume = 3;
+    bytes price = 4;
+}
+
+// CiphertextMarketOrder
+//
+// General message structure for a ciphertext order to be used in other messages
+message CiphertextMarketOrder {
+    OrderType type = 1;
+    string instrument = 2;
+    bytes volume = 3;
+}
+
+// PlaintextMarketOrder
+//
+// General message structure for a plaintext order to be used in other messages
+message PlaintextMarketOrder {
+    OrderType type = 1;
+    string instrument = 2;
+    uint32 volume = 3;
+}
+
+// AddOrderLimitRequest
+//
+// Request to publish an encrypted limit order to the exchange
+message AddOrderLimitRequest {
+    CiphertextLimitOrder order = 1;
+}
+
+message AddOrderLimitReply {
+    string uuid = 1;
+}
+
+// AddOrderLimitPlainRequest
+//
+// Request to publish an unencrypted limit order to the exchange
+message AddOrderLimitPlainRequest {
+    PlaintextLimitOrder order = 1;
+}
+
+message AddOrderLimitPlainReply {
+    string uuid = 1;
+}
+
+// AddOrderMarketRequest
+//
+// Request to publish an encrypted market order to the exchange
+message AddOrderMarketRequest {
+    CiphertextMarketOrder order = 1;
+}
+
+message AddOrderMarketReply {
+    string uuid = 1;
+}
+
+// AddOrderMarketPlainRequest
+//
+// Request to publish an unencrypted market order to the exchange
+message AddOrderMarketPlainRequest {
+    PlaintextMarketOrder order = 1;
+}
+
+message AddOrderMarketPlainReply {
+    string uuid = 1;
+}
+
+// GetPublicKeyRequest
+//
+// Request the public key for a given instrument
+message GetPublicKeyRequest {
+    string instrument = 1;
+}
+
+message GetPublicKeyReply {
+    bytes public = 1;
+    bytes context = 2;
+}
