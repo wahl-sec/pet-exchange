@@ -85,3 +85,32 @@ def route_logger(reply_type):
         return _logger
 
     return wrapper
+
+
+def route_logger_sync(reply_type):
+    def wrapper(func):
+        @wraps(func)
+        def _logger(_self, request=None, context=None, **kwargs):
+            try:
+                logger.info(
+                    f"{_self.__name__} ({_self.listen_addr}): <{request.__class__.__name__}> Incoming request from: '{context.peer()}'"
+                )
+                return func(_self, request=request, context=context, **kwargs)
+            except Exception as exc:
+                _exception = str(exc).strip('"')
+                context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+                context.set_details(_exception)
+
+                getattr(
+                    logger,
+                    "exception" if logger.level == logging.DEBUG else "error",
+                )(
+                    f"{_self.__name__} ({_self.listen_addr}): <{reply_type.__name__}> {_exception}",
+                    exc_info=exc if logger.level == logging.DEBUG else None,
+                )
+
+                return reply_type()
+
+        return _logger
+
+    return wrapper

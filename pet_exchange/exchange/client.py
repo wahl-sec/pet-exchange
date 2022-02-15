@@ -6,6 +6,7 @@ import pet_exchange.proto.exchange_pb2 as grpc_buffer_exchange
 import pet_exchange.proto.intermediate_pb2 as grpc_buffer_intermediate
 import pet_exchange.proto.intermediate_pb2_grpc as grpc_services_intermediate
 
+from pet_exchange.common.types import CiphertextOrder
 from pet_exchange.utils.logging import route_logger
 
 
@@ -18,7 +19,7 @@ class ExchangeClient:
 
         self.stub = grpc_services_intermediate.IntermediateProtoStub(self.channel)
 
-    @route_logger(grpc_buffer_intermediate.KeyGenReply)
+    # @route_logger(grpc_buffer_intermediate.KeyGenReply)
     async def GetPublicKey(
         self,
         instrument: str,
@@ -27,4 +28,29 @@ class ExchangeClient:
     ) -> grpc_buffer_intermediate.KeyGenReply:
         return await self.stub.KeyGen(
             grpc_buffer_intermediate.KeyGenRequest(instrument=instrument)
+        )
+
+    # @route_logger(grpc_buffer_intermediate.GetMinimumValueReply)
+    def GetMinimumValue(
+        self, first, second, instrument, encoding
+    ) -> grpc_buffer_intermediate.GetMinimumValueReply:
+        if encoding == "float":
+            return self.stub.GetMinimumValueFloat(
+                grpc_buffer_intermediate.GetMinimumValueRequest(
+                    first=first, second=second, instrument=instrument
+                )
+            )
+        else:
+            return self.stub.GetMinimumValueInt(
+                grpc_buffer_intermediate.GetMinimumValueRequest(
+                    first=first, second=second, instrument=instrument
+                )
+            )
+
+    def DecryptOrder(
+        self,
+        order: CiphertextOrder,
+    ) -> grpc_buffer_intermediate.DecryptOrderReply:
+        return self.stub.DecryptOrder(
+            grpc_buffer_intermediate.DecryptOrderRequest(order=order)
         )

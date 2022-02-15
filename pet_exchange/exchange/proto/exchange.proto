@@ -139,3 +139,16 @@ message GetPublicKeyReply {
     bytes public = 1;
     bytes context = 2;
 }
+
+// GetMinimumValueRequest
+//
+// Request the minimum encrypted value of two encrypted values
+message GetMinimumValueRequest {
+    bytes first = 1;
+    bytes second = 2;
+    string instrument = 3;
+}
+
+message GetMinimumValueReply {
+    bytes minimum = 1;
+}

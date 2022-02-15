@@ -8,7 +8,7 @@ import grpc
 import pet_exchange.proto.intermediate_pb2 as grpc_buffer
 import pet_exchange.proto.intermediate_pb2_grpc as grpc_services
 
-from pet_exchange.utils.logging import route_logger
+from pet_exchange.utils.logging import route_logger, route_logger_sync
 from pet_exchange.intermediate.keys import KeyEngine
 
 logger = logging.getLogger("__main__")
@@ -51,7 +51,7 @@ class IntermediateServer(grpc_services.IntermediateProtoServicer):
         )
 
     @route_logger(grpc_buffer.EncryptOrderBookReply)
-    async def EncryptOrderBookReply(
+    async def EncryptOrderBook(
         self,
         request: grpc_buffer.EncryptOrderBookRequest,
         context: grpc.aio.ServicerContext,
@@ -73,7 +73,7 @@ class IntermediateServer(grpc_services.IntermediateProtoServicer):
         )
 
     @route_logger(grpc_buffer.DecryptOrderBookReply)
-    async def DecryptOrderBookReply(
+    async def DecryptOrderBook(
         self,
         request: grpc_buffer.DecryptOrderBookRequest,
         context: grpc.aio.ServicerContext,
@@ -82,6 +82,26 @@ class IntermediateServer(grpc_services.IntermediateProtoServicer):
         return grpc_buffer.DecryptOrderBookReply(
             book=handler.decrypt_book(ciphertexts=request.book)
         )
+
+    @route_logger_sync(grpc_buffer.GetMinimumValueReply)
+    def GetMinimumValueInt(
+        self, request: grpc_buffer.GetMinimumValueRequest, context: grpc.ServicerContext
+    ) -> grpc_buffer.GetMinimumValueReply:
+        handler = self._key_engine.key_handler(instrument=request.instrument)
+        if handler.decrypt_int(request.first) < handler.decrypt_int(request.second):
+            return grpc_buffer.GetMinimumValueReply(minimum=request.first)
+        else:
+            return grpc_buffer.GetMinimumValueReply(minimum=request.second)
+
+    @route_logger_sync(grpc_buffer.GetMinimumValueReply)
+    def GetMinimumValueFloat(
+        self, request: grpc_buffer.GetMinimumValueRequest, context: grpc.ServicerContext
+    ) -> grpc_buffer.GetMinimumValueReply:
+        handler = self._key_engine.key_handler(instrument=request.instrument)
+        if handler.decrypt_float(request.first) < handler.decrypt_float(request.second):
+            return grpc_buffer.GetMinimumValueReply(minimum=request.first)
+        else:
+            return grpc_buffer.GetMinimumValueReply(minimum=request.second)
 
 
 async def serve(

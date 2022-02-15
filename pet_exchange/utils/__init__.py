@@ -10,7 +10,7 @@ LOGGER_CONFIG = {
     "formatters": {
         "INFO": {"format": "%(asctime)s :: %(levelname)s :: %(message)s"},
         "DEBUG": {
-            "format": "[%(processName)s] :: %(asctime)s :: %(levelname)s :: %(filename)s :: %(message)s"
+            "format": "[%(processName)s : %(threadName)s] :: %(asctime)s :: %(levelname)s :: %(filename)s :: %(message)s"
         },
     },
     "handlers": {

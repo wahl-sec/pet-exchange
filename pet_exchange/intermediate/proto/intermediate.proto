@@ -36,6 +36,20 @@ service IntermediateProto {
     //
     // If it fails to decrypt then a suitable status code is returned.
     rpc DecryptOrderBook (DecryptOrderBookRequest) returns (DecryptOrderBookReply);
+
+    // Request to compare two ciphertexts of floating point value and return the ciphertext of the one with the minimum value
+    //
+    // Returns the ciphertext of the minimum value
+    //
+    // If it fails to decrypt or compare then a suitable status code is returned
+    rpc GetMinimumValueInt (GetMinimumValueRequest) returns (GetMinimumValueReply);
+
+    // Request to compare two ciphertexts of integer value and return the ciphertext of the one with the minimum value
+    //
+    // Returns the ciphertext of the minimum value
+    //
+    // If it fails to decrypt or compare then a suitable status code is returned
+    rpc GetMinimumValueFloat (GetMinimumValueRequest) returns (GetMinimumValueReply);
 }
 
 // OrderType
@@ -56,7 +70,7 @@ message PlaintextOrder {
     double price = 4;
 }
 
-// PlaintextOrder
+// CiphertextOrder
 //
 // General message structure for a ciphertext order to be used in other messages
 message CiphertextOrder {
@@ -120,4 +134,17 @@ message DecryptOrderBookRequest {
 
 message DecryptOrderBookReply {
     repeated PlaintextOrder order = 1;
+}
+
+// GetMinimumValueRequest
+//
+// Decrypts, compares and gets the minimum of them, then encrypts the minimum and sends back
+message GetMinimumValueRequest {
+    bytes first = 1;
+    bytes second = 2;
+    string instrument = 3;
+}
+
+message GetMinimumValueReply {
+    bytes minimum = 1;
 }

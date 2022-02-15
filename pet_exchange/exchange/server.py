@@ -8,6 +8,7 @@ import asyncio
 import logging
 import json
 
+from Pyfhel import Pyfhel
 import grpc
 import pet_exchange.proto.exchange_pb2 as grpc_buffer
 import pet_exchange.proto.exchange_pb2_grpc as grpc_services
@@ -46,6 +47,14 @@ class ExchangeServer(grpc_services.ExchangeProtoServicer):
                 f"{self._intermediate_host}:{self._intermediate_port}"
             ),
         )
+
+        # Synchronous channel used by the matcher.
+        self._matcher._intermediate_channel = ExchangeClient(
+            listen_addr=self.listen_addr,
+            channel=grpc.insecure_channel(
+                f"{self._intermediate_host}:{self._intermediate_port}"
+            ),
+        )
         super(grpc_services.ExchangeProtoServicer).__init__()
 
     @route_logger(grpc_buffer.GetPublicKeyReply)
@@ -62,7 +71,15 @@ class ExchangeServer(grpc_services.ExchangeProtoServicer):
         _key = await self._intermediate_channel.GetPublicKey(
             instrument=request.instrument, request=request, context=context
         )
-        self._matcher.keys[request.instrument] = _key.public
+
+        # TODO: This needs to change if we want to be able to key-switch
+        if request.instrument not in self._matcher.pyfhel:
+            _pyfhel = Pyfhel()
+            _pyfhel.from_bytes_context(_key.context)
+            _pyfhel.from_bytes_publicKey(_key.public)
+
+            self._matcher.keys[request.instrument] = _key.public
+            self._matcher.pyfhel[request.instrument] = _pyfhel
 
         return grpc_buffer.GetPublicKeyReply(public=_key.public, context=_key.context)
 

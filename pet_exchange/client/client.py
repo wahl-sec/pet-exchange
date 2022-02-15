@@ -62,7 +62,6 @@ async def client(
         with _path.open(mode="w+") as _file:
             _file.write(json.dumps({"CLIENTS": {}}))  # Clears the file
 
-    # TODO: Take into account the offset (NOTE THAT THE OFFSET MUST CHECK THE TIME WITH SOMETHING LIKE TIME.GOV TO BE THE SAME FOR ALL CLIENT PROCESSES)
     # TODO: Fetch the public key and encrypt before sending to exchange, maybe we could implement a non-crypto exchange to benchmark against, just need to implement non-encrypted variants for all messages and check message type
     async with grpc.aio.insecure_channel(f"{host}:{port}") as channel:
         logger.info(f"Client '{client}': Waiting for exchange to wake up ...")
@@ -177,6 +176,9 @@ async def client(
                     _start = time.time()
 
             response = await _message(_request(order=_processed_order))
+            logger.debug(
+                f"Client ({client}): Order for instrument: '{order['instrument']}' sent with identifier: '{response.uuid}'"
+            )
             placed_orders[response.uuid] = {
                 "client": client,
                 "placed": datetime.now().strftime("%D - %H:%M:%S.%f"),

@@ -23,8 +23,6 @@ class OrderBook:
         self._book_bid: Dict[
             str,
             Union[
-                grpc_buffer.CiphertextLimitOrder,
-                grpc_buffer.CiphertextMarketOrder,
                 grpc_buffer.PlaintextLimitOrder,
                 grpc_buffer.PlaintextMarketOrder,
             ],
@@ -32,8 +30,6 @@ class OrderBook:
         self._book_ask: Dict[
             str,
             Union[
-                grpc_buffer.CiphertextLimitOrder,
-                grpc_buffer.CiphertextMarketOrder,
                 grpc_buffer.PlaintextLimitOrder,
                 grpc_buffer.PlaintextMarketOrder,
             ],
@@ -111,18 +107,6 @@ class OrderBook:
             for k, v in sorted(self._book_ask.items(), key=lambda order: order[1].price)
         }
 
-    def _sort_bid_encrypted(self):
-        """Default sort of ciphertext bid orders."""
-        raise NotImplementedError(
-            "This method needs to be implemented by the encrypted order book"
-        )
-
-    def _sort_ask_encrypted(self):
-        """Default sort of ciphertext ask orders."""
-        raise NotImplementedError(
-            "This method needs to be implemented by the encrypted order book"
-        )
-
     def add(
         self,
         order: Union[
@@ -141,11 +125,10 @@ class OrderBook:
         getattr(self, f"_add_{OrderType(order.type).name.lower()}")(
             order=order, identifier=_identifier
         )
-        if self._exchange_order_type == ExchangeOrderType.LIMIT:
-            self.sort(
-                type=OrderType(order.type),
-                encrypted=type(order).__name__.startswith("Ciphertext"),
-            )
+        # if self._exchange_order_type == ExchangeOrderType.LIMIT:
+        #     self.sort(
+        #         type=OrderType(order.type),
+        #     )
 
         return _identifier
 
@@ -153,19 +136,15 @@ class OrderBook:
         self,
         ask_identifier: str,
         bid_identifier: str,
-        performed_price: Union[bytes, int],
-        performed_volume: Union[bytes, int],
+        performed_price: int,
+        performed_volume: int,
         performed_time: str,
         bid_order: Union[
-            grpc_buffer.CiphertextLimitOrder,
             grpc_buffer.PlaintextLimitOrder,
-            grpc_buffer.CiphertextMarketOrder,
             grpc_buffer.PlaintextMarketOrder,
         ],
         ask_order: Union[
-            grpc_buffer.CiphertextLimitOrder,
             grpc_buffer.PlaintextLimitOrder,
-            grpc_buffer.CiphertextMarketOrder,
             grpc_buffer.PlaintextMarketOrder,
         ],
     ):
@@ -190,25 +169,26 @@ class OrderBook:
             },
         }
 
-    def sort(self, type: OrderType, encrypted: bool = True):
-        """Inlines sort the order book for a certain types.
+    def sort(self, type: OrderType):
+        """Inlines sort the unencrypted order book directly."""
+        getattr(self, f"_sort_{type.name.lower()}")()
 
-        If the orders are encrypted then an Intermediate component holding the secret key must
-        be involved to sort. This is handled by the derived encrypted order book instance.
-        """
-        getattr(self, f"_sort_{type.name.lower()}{'_encrypted' if encrypted else ''}")()
-
-    def merge(self, other: "OrderBook"):
+    def merge(
+        self,
+        other: Union["OrderBook", "EncryptedOrderBook"],
+        b_dropped: List[str],
+        a_dropped: List[str],
+    ):
         """Merges the other order books information with the current one in order to update exisiting orders with new orders.
 
         This is done to avoid re-execution of already executed orders.
         """
         self._book_ask.update({key: value for key, value in other._book_ask.items()})
-        self._book_bid.update({key: value for key, value in other._book_bid.items()})
-        self._book_performed.update(other._book_performed)
         self._book_ask = {
-            key: value for key, value in self._book_ask.items() if value.volume > 0
+            key: value for key, value in self._book_ask.items() if key not in a_dropped
         }
+        self._book_bid.update({key: value for key, value in other._book_bid.items()})
         self._book_bid = {
-            key: value for key, value in self._book_bid.items() if value.volume > 0
+            key: value for key, value in self._book_bid.items() if key not in b_dropped
         }
+        self._book_performed.update(other._book_performed)

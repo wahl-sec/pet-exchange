@@ -83,6 +83,26 @@ class KeyHandler:
             price=self.pyfhel.decryptFrac(_ctx_price),
         )
 
+    def decrypt_int(self, ciphertext: bytes) -> int:
+        """Decrypt a single ciphertext integer value using the initialized key-pair's secret key
+
+        Raises `ValueError` if the key-pair is not initialized yet
+        """
+        _ctx: PyCtxt = PyCtxt(serialized=ciphertext, encoding="int", pyfhel=self.pyfhel)
+
+        return self.pyfhel.decryptInt(_ctx)
+
+    def decrypt_float(self, ciphertext: bytes) -> float:
+        """Decrypt a single ciphertext floating point value using the initialized key-pair's secret key
+
+        Raises `ValueError` if the key-pair is not initialized yet
+        """
+        _ctx: PyCtxt = PyCtxt(
+            serialized=ciphertext, encoding="float", pyfhel=self.pyfhel
+        )
+
+        return self.pyfhel.decryptFrac(_ctx)
+
 
 class KeyEngine:
     def __init__(self):
