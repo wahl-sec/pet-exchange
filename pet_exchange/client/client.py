@@ -181,7 +181,7 @@ async def client(
             )
             placed_orders[response.uuid] = {
                 "client": client,
-                "placed": datetime.now().strftime("%D - %H:%M:%S.%f"),
+                "placed": datetime.now().strftime("%d/%m/%y %H:%M:%S.%f"),
                 "instrument": order["instrument"],
                 "type": order["type"],
                 "volume": order["volume"],

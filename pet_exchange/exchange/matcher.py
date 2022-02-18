@@ -174,7 +174,7 @@ class ExchangeMatcher:
                     bid_identifier=b_identifier,
                     performed_price=d_order.order.price,
                     performed_volume=d_order.order.volume,
-                    performed_time=datetime.now().strftime("%D - %H:%M:%S.%f"),
+                    performed_time=datetime.now().strftime("%d/%m/%y %H:%M:%S.%f"),
                     bid_order=b_order_c,
                     ask_order=a_order_c,
                 )
@@ -250,7 +250,7 @@ class ExchangeMatcher:
                     bid_identifier=b_identifier,
                     performed_price=a_order.price,
                     performed_volume=min_volume,
-                    performed_time=datetime.now().strftime("%D - %H:%M:%S.%f"),
+                    performed_time=datetime.now().strftime("%d/%m/%y %H:%M:%S.%f"),
                     bid_order=b_order_c,
                     ask_order=a_order_c,
                 )
