@@ -277,7 +277,6 @@ class MatchingEngine:
                 second: Union[
                     grpc_buffer.CiphertextLimitOrder, grpc_buffer.CiphertextMarketOrder
                 ],
-                reverse: bool,
             ) -> Union[
                 grpc_buffer.CiphertextLimitOrder, grpc_buffer.CiphertextMarketOrder
             ]:
@@ -285,7 +284,7 @@ class MatchingEngine:
                 _, first = first
                 _, second = second
                 return (
-                    1
+                    -1
                     if (
                         self._intermediate_channel.GetMinimumValue(
                             first=first.price,
@@ -293,18 +292,18 @@ class MatchingEngine:
                             instrument=instrument,
                             encoding="float",
                         ).minimum
-                        == first
+                        == first.price
                     )
-                    else -1
+                    else 1
                 )
 
             book.sort(
                 type=OrderType.BID,
-                func=lambda first, second: _remote_sort(first, second, reverse=False),
+                func=lambda first, second: _remote_sort(first, second),
             )
             book.sort(
                 type=OrderType.ASK,
-                func=lambda first, second: _remote_sort(first, second, reverse=True),
+                func=lambda first, second: _remote_sort(first, second),
             )
         else:
             book.sort(type=OrderType.BID)

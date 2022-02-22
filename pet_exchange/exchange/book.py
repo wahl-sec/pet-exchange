@@ -53,15 +53,18 @@ class EncryptedOrderBook(OrderBook):
         self._book_bid = {
             k: v
             for k, v in sorted(
-                self._book_bid.items(),
-                key=functools.cmp_to_key(func),
-                reverse=True,
+                self._book_bid.items(), key=functools.cmp_to_key(func), reverse=True
             )
         }
 
     def _sort_ask_encrypted(self, func: Callable):
         """Default sort of ciphertext ask orders."""
-        pass
+        self._book_ask = {
+            k: v
+            for k, v in sorted(
+                self._book_ask.items(), key=functools.cmp_to_key(func), reverse=False
+            )
+        }
 
     def sort(self, type: OrderType, func: Callable):
         """Inlines sort the encrypted order book.

@@ -104,7 +104,9 @@ class OrderBook:
         """Default sort of plaintext ask orders."""
         self._book_ask = {
             k: v
-            for k, v in sorted(self._book_ask.items(), key=lambda order: order[1].price)
+            for k, v in sorted(
+                self._book_ask.items(), key=lambda order: order[1].price, reverse=False
+            )
         }
 
     def add(

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from typing import List, NoReturn, Any, Dict
+from typing import List, NoReturn, Any, Dict, Tuple
 from argparse import ArgumentParser
 from datetime import datetime
 from pathlib import Path
@@ -130,12 +130,14 @@ METRICS_STRUCTURE = {
     "TOTAL_ORDERS_SUBMITTED_BID": None,
     "TOTAL_ORDERS_SUBMITTED_ASK": None,
     "TOTAL_ORDERS_EXECUTED": None,
-    "TOTAL_ORDERS_EXECUTED_BID": None,
-    "TOTAL_ORDERS_EXECUTED_ASK": None,
     "FIRST_ORDER_SUBMITTED_DATE": None,
     "LAST_ORDER_SUBMITTED_DATE": None,
     "MAX_TIME_TO_COMPLETION": None,
+    "MAX_TIME_TO_COMPLETION_BID": None,
+    "MAX_TIME_TO_COMPLETION_ASK": None,
     "MIN_TIME_TO_COMPLETION": None,
+    "MIN_TIME_TO_COMPLETION_BID": None,
+    "MIN_TIME_TO_COMPLETION_ASK": None,
     "AVERAGE_TIME_TO_COMPLETION": None,
     "AVERAGE_TIME_TO_COMPLETION_BID": None,
     "AVERAGE_TIME_TO_COMPLETION_ASK": None,
@@ -152,17 +154,11 @@ METRICS_STRUCTURE = {
     "AVERAGE_PRICE_SUBMITTED_BID": None,
     "AVERAGE_PRICE_SUBMITTED_ASK": None,
     "TOTAL_VOLUME_EXECUTED": None,
-    "TOTAL_VOLUME_EXECUTED_BID": None,
-    "TOTAL_VOLUME_EXECUTED_ASK": None,
     "AVERAGE_VOLUME_EXECUTED": None,
-    "AVERAGE_VOLUME_EXECUTED_BID": None,
-    "AVERAGE_VOLUME_EXECUTED_ASK": None,
     "TOTAL_PRICE_EXECUTED": None,
-    "TOTAL_PRICE_EXECUTED_BID": None,
-    "TOTAL_PRICE_EXECUTED_ASK": None,
     "AVERAGE_PRICE_EXECUTED": None,
-    "AVERAGE_PRICE_EXECUTED_BID": None,
-    "AVERAGE_PRICE_EXECUTED_ASK": None,
+    "TOTAL_PRICE_PER_EXECUTED": None,
+    "AVERAGE_PRICE_PER_EXECUTED": None,
 }
 
 
@@ -750,7 +746,9 @@ def _get_instruments_metrics_struct(
     return struct
 
 
-def create_report(path_exchange: str, path_clients: List[str], path_output: str) -> NoReturn:
+def create_report(
+    path_exchange: str, path_clients: List[str], path_output: str
+) -> NoReturn:
     """Create an aggregated report in JSON format
     Details the connected trades, volumes, prices, timings etc
     """
@@ -815,6 +813,13 @@ def create_report(path_exchange: str, path_clients: List[str], path_output: str)
             if instrument not in struct["TRADES"]:
                 struct["TRADES"][instrument] = {}
 
+            for identifier, order in exchange_orders.items():
+                if order["references"]["bid"] not in all_orders_executed:
+                    all_orders_executed[order["references"]["bid"]] = order
+
+                if order["references"]["ask"] not in all_orders_executed:
+                    all_orders_executed[order["references"]["ask"]] = order
+
             struct["TRADES"][instrument].update(
                 {
                     key: {
@@ -834,11 +839,226 @@ def create_report(path_exchange: str, path_clients: List[str], path_output: str)
                 }
             )
 
-        struct["METRICS"] = METRICS_STRUCTURE.copy()
+        first_submitted_date: str = None
+        last_submitted_date: str = None
+        for identifier, order in all_orders.items():
+            if first_submitted_date is None or datetime.strptime(
+                order["placed"], DATE_FORMAT
+            ) < datetime.strptime(first_submitted_date, DATE_FORMAT):
+                first_submitted_date = order["placed"]
 
-    with open(
-        str(Path(path_output)), mode="w+"
-    ) as report_file:
+            if last_submitted_date is None or datetime.strptime(
+                order["placed"], DATE_FORMAT
+            ) > datetime.strptime(first_submitted_date, DATE_FORMAT):
+                last_submitted_date = order["placed"]
+
+        time_completion_bid: List[float] = []
+        time_completion_ask: List[float] = []
+        for identifier, order in all_orders_executed.items():
+            time_completion_bid.append(
+                (
+                    datetime.strptime(order["performed"]["at"], DATE_FORMAT)
+                    - datetime.strptime(
+                        all_orders[order["references"]["bid"]]["placed"], DATE_FORMAT
+                    )
+                ).total_seconds()
+            )
+            time_completion_ask.append(
+                (
+                    datetime.strptime(order["performed"]["at"], DATE_FORMAT)
+                    - datetime.strptime(
+                        all_orders[order["references"]["ask"]]["placed"], DATE_FORMAT
+                    )
+                ).total_seconds()
+            )
+
+        struct["METRICS"] = METRICS_STRUCTURE.copy()
+        struct["METRICS"].update(
+            {
+                "TOTAL_ORDERS_SUBMITTED": len(total_orders),
+                "TOTAL_ORDERS_SUBMITTED_BID": len(
+                    [_order for _order in total_orders if _order["type"] == "BID"]
+                ),
+                "TOTAL_ORDERS_SUBMITTED_ASK": len(
+                    [_order for _order in total_orders if _order["type"] == "ASK"]
+                ),
+                "TOTAL_ORDERS_EXECUTED": len(all_orders_executed),
+                "FIRST_ORDER_SUBMITTED_DATE": first_submitted_date,
+                "LAST_ORDER_SUBMITTED_DATE": last_submitted_date,
+                "MAX_TIME_TO_COMPLETION": max(
+                    time_completion_bid + time_completion_ask
+                ),
+                "MAX_TIME_TO_COMPLETION_BID": max(time_completion_bid),
+                "MAX_TIME_TO_COMPLETION_ASK": max(time_completion_ask),
+                "MIN_TIME_TO_COMPLETION": min(
+                    time_completion_bid + time_completion_ask
+                ),
+                "MIN_TIME_TO_COMPLETION_BID": min(time_completion_bid),
+                "MIN_TIME_TO_COMPLETION_ASK": min(time_completion_ask),
+                "AVERAGE_TIME_TO_COMPLETION": sum(
+                    time_completion_bid + time_completion_ask
+                )
+                / (len(time_completion_ask) + len(time_completion_bid)),
+                "AVERAGE_TIME_TO_COMPLETION_BID": sum(time_completion_bid)
+                / len(time_completion_bid),
+                "AVERAGE_TIME_TO_COMPLETION_ASK": sum(time_completion_ask)
+                / len(time_completion_ask),
+                "TOTAL_VOLUME_SUBMITTED": sum(
+                    [_order["volume"] for _order in all_orders.values()]
+                ),
+                "TOTAL_VOLUME_SUBMITTED_BID": sum(
+                    [
+                        _order["volume"]
+                        for _order in all_orders.values()
+                        if _order["type"] == "BID"
+                    ]
+                ),
+                "TOTAL_VOLUME_SUBMITTED_ASK": sum(
+                    [
+                        _order["volume"]
+                        for _order in all_orders.values()
+                        if _order["type"] == "ASK"
+                    ]
+                ),
+                "AVERAGE_VOLUME_SUBMITTED": sum(
+                    [_order["volume"] for _order in all_orders.values()]
+                )
+                / len([_order["volume"] for _order in all_orders.values()]),
+                "AVERAGE_VOLUME_SUBMITTED_BID": sum(
+                    [
+                        _order["volume"]
+                        for _order in all_orders.values()
+                        if _order["type"] == "BID"
+                    ]
+                )
+                / len(
+                    [
+                        _order["volume"]
+                        for _order in all_orders.values()
+                        if _order["type"] == "BID"
+                    ]
+                ),
+                "AVERAGE_VOLUME_SUBMITTED_ASK": sum(
+                    [
+                        _order["volume"]
+                        for _order in all_orders.values()
+                        if _order["type"] == "ASK"
+                    ]
+                )
+                / len(
+                    [
+                        _order["volume"]
+                        for _order in all_orders.values()
+                        if _order["type"] == "ASK"
+                    ]
+                ),
+                "TOTAL_PRICE_SUBMITTED": sum(
+                    [_order["price"] for _order in all_orders.values()]
+                ),
+                "TOTAL_PRICE_SUBMITTED_BID": sum(
+                    [
+                        _order["price"]
+                        for _order in all_orders.values()
+                        if _order["type"] == "BID"
+                    ]
+                ),
+                "TOTAL_PRICE_SUBMITTED_ASK": sum(
+                    [
+                        _order["price"]
+                        for _order in all_orders.values()
+                        if _order["type"] == "ASK"
+                    ]
+                ),
+                "AVERAGE_PRICE_SUBMITTED": sum(
+                    [_order["price"] for _order in all_orders.values()]
+                )
+                / len([_order["price"] for _order in all_orders.values()]),
+                "AVERAGE_PRICE_SUBMITTED_BID": sum(
+                    [
+                        _order["price"]
+                        for _order in all_orders.values()
+                        if _order["type"] == "BID"
+                    ]
+                )
+                / len(
+                    [
+                        _order["price"]
+                        for _order in all_orders.values()
+                        if _order["type"] == "BID"
+                    ]
+                ),
+                "AVERAGE_PRICE_SUBMITTED_ASK": sum(
+                    [
+                        _order["price"]
+                        for _order in all_orders.values()
+                        if _order["type"] == "ASK"
+                    ]
+                )
+                / len(
+                    [
+                        _order["price"]
+                        for _order in all_orders.values()
+                        if _order["type"] == "ASK"
+                    ]
+                ),
+                "TOTAL_VOLUME_EXECUTED": sum(
+                    [
+                        _order["performed"]["volume"]
+                        for _order in all_orders_executed.values()
+                    ]
+                ),
+                "AVERAGE_VOLUME_EXECUTED": sum(
+                    [
+                        _order["performed"]["volume"]
+                        for _order in all_orders_executed.values()
+                    ]
+                )
+                / len(
+                    [
+                        _order["performed"]["volume"]
+                        for _order in all_orders_executed.values()
+                    ]
+                ),
+                "TOTAL_PRICE_EXECUTED": sum(
+                    [
+                        _order["performed"]["price"] * _order["performed"]["volume"]
+                        for _order in all_orders_executed.values()
+                    ]
+                ),
+                "AVERAGE_PRICE_EXECUTED": sum(
+                    [
+                        _order["performed"]["price"] * _order["performed"]["volume"]
+                        for _order in all_orders_executed.values()
+                    ]
+                )
+                / len(
+                    [
+                        _order["performed"]["price"]
+                        for _order in all_orders_executed.values()
+                    ]
+                ),
+                "TOTAL_PRICE_PER_EXECUTED": sum(
+                    [
+                        _order["performed"]["price"]
+                        for _order in all_orders_executed.values()
+                    ]
+                ),
+                "AVERAGE_PRICE_PER_EXECUTED": sum(
+                    [
+                        _order["performed"]["price"]
+                        for _order in all_orders_executed.values()
+                    ]
+                )
+                / len(
+                    [
+                        _order["performed"]["price"]
+                        for _order in all_orders_executed.values()
+                    ]
+                ),
+            }
+        )
+
+    with open(str(Path(path_output)), mode="w+") as report_file:
         report_file.write(json.dumps(struct))
 
 
