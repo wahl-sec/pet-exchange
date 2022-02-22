@@ -63,6 +63,9 @@ def _determine_process_count(args: Namespace) -> int:
         if arg.endswith("_server") and getattr(args, arg):
             _counter += 1
 
+    if args.client_input_files and _counter == 0:
+        _counter += 1
+
     return _counter
 
 
@@ -308,7 +311,7 @@ if __name__ == "__main__":
 
     if (
         not any([getattr(args, arg) for arg in vars(args) if arg.endswith("_server")])
-        and not args.client.client_input_files
+        and not args.client_input_files
     ):
         logging.error(
             "No components/clients were defined please see `-h`, `--help` for more details on usage"
