@@ -4,8 +4,7 @@
 from os import path
 from typing import Dict, Any, Optional
 from datetime import datetime
-from functools import wraps
-import multiprocessing
+from functools import wraps, partialmethod, partial
 import logging
 import logging.config
 
@@ -15,9 +14,13 @@ from utils import ROOT_PATH
 
 
 logger = logging.getLogger("__main__")
+TRADE_LOG_LEVEL = 21
+
+logging.addLevelName(TRADE_LOG_LEVEL, "TRADE")
 
 
 class CustomFormatter(logging.Formatter):
+    GREEN = "\x1b[32;20m"
     BLUE = "\x1b[36;20m"
     GRAY = "\x1b[38;20m"
     PURPLE = "\x1b[35;20m"
@@ -34,6 +37,7 @@ class CustomFormatter(logging.Formatter):
             logging.ERROR: self.RED + _format + self.RESET,
             logging.CRITICAL: self.BOLD_RED + _format + self.RESET,
             logging.FATAL: self.BOLD_RED + _format + self.RESET,
+            TRADE_LOG_LEVEL: self.GREEN + _format + self.RESET,
         }
 
     def format(self, record):
@@ -63,7 +67,7 @@ def route_logger(reply_type):
         @wraps(func)
         async def _logger(_self, request=None, context=None, **kwargs):
             try:
-                logger.info(
+                logger.debug(
                     f"{_self.__name__} ({_self.listen_addr}): <{request.__class__.__name__}> Incoming request from: '{context.peer()}'"
                 )
                 return await func(_self, request=request, context=context, **kwargs)
@@ -92,7 +96,7 @@ def route_logger_sync(reply_type):
         @wraps(func)
         def _logger(_self, request=None, context=None, **kwargs):
             try:
-                logger.info(
+                logger.debug(
                     f"{_self.__name__} ({_self.listen_addr}): <{request.__class__.__name__}> Incoming request from: '{context.peer()}'"
                 )
                 return func(_self, request=request, context=context, **kwargs)

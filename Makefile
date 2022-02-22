@@ -10,9 +10,11 @@ install:
 	python -m pip install wheel grpcio-tools setuptools
 	$(foreach PACKAGE,$(PACKAGES),$(call PROTO_RESOLVE,$(PACKAGE)))
 	python setup.py install
+	mkdir trades
 
 .PET-EXCHANGE: develop
 develop:
 	python -m pip install wheel setuptools grpcio-tools
 	$(foreach PACKAGE,$(PACKAGES),$(call PROTO_RESOLVE,$(PACKAGE)))
 	pip install -e .[dev]
+	mkdir trades

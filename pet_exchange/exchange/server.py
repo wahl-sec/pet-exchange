@@ -14,7 +14,7 @@ import pet_exchange.proto.exchange_pb2 as grpc_buffer
 import pet_exchange.proto.exchange_pb2_grpc as grpc_services
 
 from pet_exchange.exchange import OrderType, ExchangeOrderType
-from pet_exchange.exchange.matcher import ExchangeMatcher
+from pet_exchange.engine.matcher import MatchingEngine
 from pet_exchange.exchange.client import ExchangeClient
 from pet_exchange.exchange.book import EncryptedOrderBook, OrderBook
 from pet_exchange.utils.logging import route_logger
@@ -32,7 +32,7 @@ class ExchangeServer(grpc_services.ExchangeProtoServicer):
         listen_addr: str,
         intermediate_host: str,
         intermediate_port: int,
-        matcher: ExchangeMatcher,
+        matcher: MatchingEngine,
     ):
         self.listen_addr = listen_addr
         self._intermediate_host, self._intermediate_port = (
@@ -174,12 +174,12 @@ async def serve(
         with _path.open(mode="w+") as _file:
             _file.write(json.dumps({}))  # Clears the file
 
-    matcher = ExchangeMatcher(output=exchange_output)
+    matcher = MatchingEngine(output=exchange_output)
 
     # TODO: Make this variable maybe, like multiple matchers for different books
     #       Alternatively we can make it so that the matcher creates another layer of threads to handle different books.
     with concurrent.futures.ThreadPoolExecutor(max_workers=5) as pool:
-        logger.info(f"Exchange-Matcher ({listen_addr}): Waiting for orders ...")
+        logger.info(f"{matcher.__name__} ({listen_addr}): Waiting for orders ...")
         pool.submit(_start_matcher, matcher=matcher, encrypted=encrypted)
 
         # Runs on the main child-process

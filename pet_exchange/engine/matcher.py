@@ -28,12 +28,13 @@ from pet_exchange.common.crypto import (
     encrypt_sub_ciphertext_int,
     encrypt_sub_ciphertext_float,
 )
+from pet_exchange.utils.logging import TRADE_LOG_LEVEL
 
 logger = logging.getLogger("__main__")
 
 
-class ExchangeMatcher:
-    __name__ = "Exchange-Matcher"
+class MatchingEngine:
+    __name__ = "Matching-Engine"
 
     def __init__(self, output: str):
         self.book: Dict[str, Union[EncryptedOrderBook, OrderBook]] = {}
@@ -73,13 +74,13 @@ class ExchangeMatcher:
         try:
             b_identifier, b_order = next(bid_queue)
         except StopIteration:
-            logger.debug(f"Exchange-Matcher ({instrument}): No more bid orders ...")
+            logger.debug(f"{self.__name__} ({instrument}): No more bid orders ...")
             return book, b_dropped, a_dropped
 
         try:
             a_identifier, a_order = next(ask_queue)
         except StopIteration:
-            logger.debug(f"Exchange-Matcher ({instrument}): No more ask orders ...")
+            logger.debug(f"{self.__name__} ({instrument}): No more ask orders ...")
             return book, b_dropped, a_dropped
 
         while True:
@@ -88,7 +89,7 @@ class ExchangeMatcher:
                     b_identifier, b_order = next(bid_queue)
                 except StopIteration:
                     logger.debug(
-                        f"Exchange-Matcher ({instrument}): No more bid orders ..."
+                        f"{self.__name__} ({instrument}): No more bid orders ..."
                     )
                     return book, b_dropped, a_dropped
 
@@ -97,7 +98,7 @@ class ExchangeMatcher:
                     a_identifier, a_order = next(ask_queue)
                 except StopIteration:
                     logger.debug(
-                        f"Exchange-Matcher ({instrument}): No more ask orders ..."
+                        f"{self.__name__} ({instrument}): No more ask orders ..."
                     )
                     return book, b_dropped, a_dropped
 
@@ -117,7 +118,7 @@ class ExchangeMatcher:
 
             if b_otp_price == _minimum_otp_price and a_otp_price != _minimum_otp_price:
                 logger.info(
-                    f"Exchange-Matcher ({instrument}): No more matches possible ..."
+                    f"{self.__name__} ({instrument}): No more matches possible ..."
                 )
                 break
             else:
@@ -156,8 +157,9 @@ class ExchangeMatcher:
                         a_order.volume, _minimum_volume, pyfhel=self.pyfhel[instrument]
                     )
 
-                logger.warn(
-                    f"Exchange-Matcher ({instrument}): Trade 'BID' ({b_identifier}) V ({b_order_c.volume.hex()[:20]}) -> V ({b_order.volume.hex()[:20]}), 'ASK' ({a_identifier}) V ({a_order_c.volume.hex()[:20]}) -> V ({a_order.volume.hex()[:20]}) for P ({a_order.price.hex()[:20]})"
+                logger.log(
+                    level=TRADE_LOG_LEVEL,
+                    msg=f"{self.__name__} ({instrument}): Trade 'BID' ({b_identifier}) V ({b_order_c.volume.hex()[:20]}) -> V ({b_order.volume.hex()[:20]}), 'ASK' ({a_identifier}) V ({a_order_c.volume.hex()[:20]}) -> V ({a_order.volume.hex()[:20]}) for P ({a_order.price.hex()[:20]})",
                 )
 
                 d_order = self._intermediate_channel.DecryptOrder(
@@ -191,13 +193,13 @@ class ExchangeMatcher:
         try:
             b_identifier, b_order = next(bid_queue)
         except StopIteration:
-            logger.debug(f"Exchange-Matcher ({instrument}): No more bid orders ...")
+            logger.debug(f"{self.__name__} ({instrument}): No more bid orders ...")
             return book, b_dropped, a_dropped
 
         try:
             a_identifier, a_order = next(ask_queue)
         except StopIteration:
-            logger.debug(f"Exchange-Matcher ({instrument}): No more ask orders ...")
+            logger.debug(f"{self.__name__} ({instrument}): No more ask orders ...")
             return book, b_dropped, a_dropped
 
         while True:
@@ -206,7 +208,7 @@ class ExchangeMatcher:
                     b_identifier, b_order = next(bid_queue)
                 except StopIteration:
                     logger.debug(
-                        f"Exchange-Matcher ({instrument}): No more bid orders ..."
+                        f"{self.__name__} ({instrument}): No more bid orders ..."
                     )
                     return book, b_dropped, a_dropped
 
@@ -215,13 +217,13 @@ class ExchangeMatcher:
                     a_identifier, a_order = next(ask_queue)
                 except StopIteration:
                     logger.debug(
-                        f"Exchange-Matcher ({instrument}): No more ask orders ..."
+                        f"{self.__name__} ({instrument}): No more ask orders ..."
                     )
                     return book, b_dropped, a_dropped
 
             if b_order.price < a_order.price:
                 logger.info(
-                    f"Exchange-Matcher ({instrument}): No more matches possible ..."
+                    f"{self.__name__} ({instrument}): No more matches possible ..."
                 )
                 break
             else:
@@ -240,8 +242,9 @@ class ExchangeMatcher:
                 else:
                     a_order.volume = a_order.volume - min_volume
 
-                logger.warn(
-                    f"Exchange-Matcher ({instrument}): Trade 'BID' ({b_identifier}) V ({b_order_c.volume}) -> V ({b_order.volume}), 'ASK' ({a_identifier}) V ({a_order_c.volume}) -> V ({a_order.volume}) for P ({a_order.price})"
+                logger.log(
+                    level=TRADE_LOG_LEVEL,
+                    msg=f"{self.__name__} ({instrument}): Trade 'BID' ({b_identifier}) V ({b_order_c.volume}) -> V ({b_order.volume}), 'ASK' ({a_identifier}) V ({a_order_c.volume}) -> V ({a_order.volume}) for P ({a_order.price})",
                 )
 
                 # TODO: Publish in a cleartext form since it has been executed
@@ -345,7 +348,7 @@ class ExchangeMatcher:
 
                 except Exception as e:
                     logger.error(
-                        f"Exchange-Matcher (Global): Encountered error during matching: {e}"
+                        f"{self.__name__} (Global): Encountered error during matching: {e}"
                     )
                     import traceback
 
