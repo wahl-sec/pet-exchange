@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from typing import NoReturn, Union, List, Dict, Any, Callable
+from typing import NoReturn, Union, List, Dict, Any, Callable, Optional
 import functools
 import logging
 
@@ -79,6 +79,8 @@ class EncryptedOrderBook(OrderBook):
         self,
         ask_identifier: str,
         bid_identifier: str,
+        ask_entity: Optional[str],
+        bid_entity: Optional[str],
         performed_price: bytes,
         performed_volume: bytes,
         performed_time: str,
@@ -112,6 +114,7 @@ class EncryptedOrderBook(OrderBook):
                 "volume": performed_volume,
                 "at": performed_time,
             },
+            "entity": {"bid": bid_entity, "ask": ask_entity},
             "remains": {
                 "bid": None,
                 "ask": None,

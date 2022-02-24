@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 
-from typing import Union, Dict
+from typing import Union, Dict, List
 from dataclasses import dataclass
 import logging
 
@@ -23,7 +23,7 @@ class KeyHandler:
     def __init__(self, instrument: str):
         self.instrument: str = instrument
         self.pyfhel: Pyfhel = Pyfhel()
-        self.pyfhel.contextGen(p=655357)
+        self.pyfhel.contextGen(p=65537, flagBatching=True)
 
         self._key_pair: KeyPair = None
         self._context = self.pyfhel.to_bytes_context()
@@ -102,6 +102,17 @@ class KeyHandler:
         )
 
         return self.pyfhel.decryptFrac(_ctx)
+
+    def decrypt_array(self, ciphertext: bytes) -> List[int]:
+        """Decrypt a single ciphertext array value using the initialized key-pair's secret key
+
+        Raises `ValueError` if the key-pair is not initialized yet
+        """
+        _ctx: PyCtxt = PyCtxt(
+            serialized=ciphertext, encoding="array", pyfhel=self.pyfhel
+        )
+
+        return self.pyfhel.decryptBatch(_ctx)
 
 
 class KeyEngine:

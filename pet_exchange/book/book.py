@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from typing import NoReturn, Union, List, Dict, Generator, Any
+from typing import NoReturn, Union, List, Dict, Generator, Any, Optional
 import logging
 
 import pet_exchange.proto.exchange_pb2 as grpc_buffer
@@ -138,6 +138,8 @@ class OrderBook:
         self,
         ask_identifier: str,
         bid_identifier: str,
+        ask_entity: Optional[str],
+        bid_entity: Optional[str],
         performed_price: int,
         performed_volume: int,
         performed_time: str,
@@ -165,6 +167,7 @@ class OrderBook:
                 "volume": performed_volume,
                 "at": performed_time,
             },
+            "entity": {"bid": bid_entity, "ask": ask_entity},
             "remains": {
                 "bid": bid_order.volume - performed_volume,
                 "ask": ask_order.volume - performed_volume,

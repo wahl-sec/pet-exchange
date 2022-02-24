@@ -52,8 +52,9 @@ enum OrderType {
 message PlaintextLimitOrder {
     OrderType type = 1;
     string instrument = 2;
-    uint32 volume = 3;
-    double price = 4;
+    string entity = 3;
+    uint32 volume = 4;
+    double price = 5;
 }
 
 // CiphertextLimitOrder
@@ -62,8 +63,9 @@ message PlaintextLimitOrder {
 message CiphertextLimitOrder {
     OrderType type = 1;
     string instrument = 2;
-    bytes volume = 3;
-    bytes price = 4;
+    bytes entity = 3;
+    bytes volume = 4;
+    bytes price = 5;
 }
 
 // CiphertextMarketOrder
@@ -72,7 +74,8 @@ message CiphertextLimitOrder {
 message CiphertextMarketOrder {
     OrderType type = 1;
     string instrument = 2;
-    bytes volume = 3;
+    bytes entity = 3;
+    bytes volume = 4;
 }
 
 // PlaintextMarketOrder
@@ -81,7 +84,8 @@ message CiphertextMarketOrder {
 message PlaintextMarketOrder {
     OrderType type = 1;
     string instrument = 2;
-    uint32 volume = 3;
+    string entity = 3;
+    uint32 volume = 4;
 }
 
 // AddOrderLimitRequest

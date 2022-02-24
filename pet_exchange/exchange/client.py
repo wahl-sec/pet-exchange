@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+from typing import Optional
+
 import grpc
 import pet_exchange.proto.exchange_pb2 as grpc_buffer_exchange
 import pet_exchange.proto.intermediate_pb2 as grpc_buffer_intermediate
@@ -50,7 +52,11 @@ class ExchangeClient:
     def DecryptOrder(
         self,
         order: CiphertextOrder,
+        entity_bid: Optional[bytes] = None,
+        entity_ask: Optional[bytes] = None,
     ) -> grpc_buffer_intermediate.DecryptOrderReply:
         return self.stub.DecryptOrder(
-            grpc_buffer_intermediate.DecryptOrderRequest(order=order)
+            grpc_buffer_intermediate.DecryptOrderRequest(
+                order=order, entity_bid=entity_bid, entity_ask=entity_ask
+            )
         )

@@ -163,17 +163,21 @@ class MatchingEngine:
                 )
 
                 d_order = self._intermediate_channel.DecryptOrder(
-                    grpc_buffer_intermediate.CiphertextOrder(
+                    order=grpc_buffer_intermediate.CiphertextOrder(
                         type=a_order.type,
                         instrument=instrument,
                         volume=_minimum_volume,
                         price=a_order.price,
-                    )
+                    ),
+                    entity_bid=b_order.entity,
+                    entity_ask=a_order.entity,
                 )
 
                 book.add_performed(
                     ask_identifier=a_identifier,
                     bid_identifier=b_identifier,
+                    ask_entity=d_order.entity_ask,
+                    bid_entity=d_order.entity_bid,
                     performed_price=d_order.order.price,
                     performed_volume=d_order.order.volume,
                     performed_time=datetime.now().strftime("%d/%m/%y %H:%M:%S.%f"),
@@ -251,6 +255,8 @@ class MatchingEngine:
                 book.add_performed(
                     ask_identifier=a_identifier,
                     bid_identifier=b_identifier,
+                    ask_entity=a_order.entity,
+                    bid_entity=b_order.entity,
                     performed_price=a_order.price,
                     performed_volume=min_volume,
                     performed_time=datetime.now().strftime("%d/%m/%y %H:%M:%S.%f"),

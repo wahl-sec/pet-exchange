@@ -68,8 +68,23 @@ class IntermediateServer(grpc_services.IntermediateProtoServicer):
         context: grpc.aio.ServicerContext,
     ) -> grpc_buffer.DecryptOrderReply:
         handler = self._key_engine.key_handler(instrument=request.order.instrument)
+
         return grpc_buffer.DecryptOrderReply(
             order=handler.decrypt(ciphertext=request.order),
+            entity_bid="".join(
+                chr(ch)
+                for ch in handler.decrypt_array(ciphertext=request.entity_bid)
+                if ch
+            )
+            if hasattr(request, "entity_bid")
+            else None,
+            entity_ask="".join(
+                chr(ch)
+                for ch in handler.decrypt_array(ciphertext=request.entity_ask)
+                if ch  # This will skip 0 (terminator) values, maybe we need to have a better solution?
+            )
+            if hasattr(request, "entity_ask")
+            else None,
         )
 
     @route_logger(grpc_buffer.DecryptOrderBookReply)

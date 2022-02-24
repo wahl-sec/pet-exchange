@@ -66,8 +66,9 @@ enum OrderType {
 message PlaintextOrder {
     OrderType type = 1;
     string instrument = 2;
-    uint32 volume = 3;
-    double price = 4;
+    string entity = 3;
+    uint32 volume = 4;
+    double price = 5;
 }
 
 // CiphertextOrder
@@ -76,8 +77,9 @@ message PlaintextOrder {
 message CiphertextOrder {
     OrderType type = 1;
     string instrument = 2;
-    bytes volume = 3;
-    bytes price = 4;
+    bytes entity = 3;
+    bytes volume = 4;
+    bytes price = 5;
 }
 
 // KeyGen
@@ -119,10 +121,14 @@ message EncryptOrderBookReply {
 // Request to decrypt an order encrypted by the public key connected to a certain instrument
 message DecryptOrderRequest {
     CiphertextOrder order = 1;
+    optional bytes entity_bid = 2;
+    optional bytes entity_ask = 3;
 }
 
 message DecryptOrderReply {
     PlaintextOrder order = 1;
+    optional string entity_bid = 2;
+    optional string entity_ask = 3;
 }
 
 // DecryptOrderBook

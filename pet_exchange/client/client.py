@@ -17,7 +17,7 @@ import pet_exchange.proto.exchange_pb2 as grpc_buffer
 import pet_exchange.proto.exchange_pb2_grpc as grpc_services
 
 from pet_exchange.exchange import ExchangeOrderType
-from pet_exchange.common.crypto import encrypt_frac, encrypt_int
+from pet_exchange.common.crypto import encrypt_frac, encrypt_int, encrypt_string
 
 
 def _write_output(output: str, client: str, orders: Dict[str, Any]) -> NoReturn:
@@ -135,6 +135,9 @@ async def client(
                     **{
                         "instrument": order["instrument"],
                         "type": order["type"],
+                        "entity": encrypt_string(
+                            client, pyfhel=keys[order["instrument"]]
+                        ),
                         "volume": encrypt_int(
                             value=order["volume"], pyfhel=keys[order["instrument"]]
                         ),
@@ -154,6 +157,7 @@ async def client(
                     **{
                         "instrument": order["instrument"],
                         "type": order["type"],
+                        "entity": client,
                         "volume": order["volume"],
                     },
                     **(
@@ -170,7 +174,7 @@ async def client(
                 and order.get("offset")
                 and time.time() - _start <= float(order.get("offset"))
             ):
-                pass
+                pass  # Wait until offset has finished
             else:
                 if _start is not None:
                     _start = time.time()

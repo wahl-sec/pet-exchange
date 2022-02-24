@@ -4,6 +4,11 @@
 from typing import Union
 
 from Pyfhel import Pyfhel, PyCtxt, PyPtxt
+import numpy as np
+
+
+def encrypt_string(value: str, pyfhel: Pyfhel) -> bytes:
+    return pyfhel.encryptBatch(np.array(list(map(lambda c: ord(c), value)))).to_bytes()
 
 
 def encrypt_int(value: int, pyfhel: Pyfhel) -> bytes:
