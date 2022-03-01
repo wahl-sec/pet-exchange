@@ -26,7 +26,8 @@ MAXIMUM_VOLUME = 250
 MINIMUM_OFFSET = None
 MAXIMUM_OFFSET = None
 INSTRUMENT_NAME = "COMP"
-BID_RATIO = 0.4
+TYPE_RATIO = 0.5
+VOLUME_RATIO = 0.5
 NEXT_ORDER_PEAK_PROBABILITY = 0.4
 NEXT_ORDER_DIP_PROBABILITY = 0.4
 PEAK_OFFSET = 0.2
@@ -78,16 +79,21 @@ class Entity:
         else:
             return None
 
-    def _determine_order_type(self) -> Union[Literal["BID"], Literal["ASK"]]:
-        if not self.market or not [
-            order for order in self.market if order.type == "ASK"
-        ]:
-            return "ASK"
+    def _determine_order_type(
+        self, instrument: str
+    ) -> Union[Literal["BID"], Literal["ASK"]]:
+        bid_type: int = 0
+        ask_type: int = 0
 
-        if (
-            sum([1 for order in self.market if order.type == "BID"])
-            / sum([1 for order in self.market if order.type == "ASK"])
-        ) < BID_RATIO:
+        for order in self.market:
+            if order.instrument == instrument:
+                bid_type += 1 if order.type == "BID" else 0
+                ask_type += 1 if order.type == "ASK" else 0
+
+        if bid_type == 0 and ask_type == 0:
+            return choice(["ASK", "BID"])
+
+        if (bid_type / (bid_type + ask_type)) < TYPE_RATIO:
             return "BID"
 
         return "ASK"
@@ -140,8 +146,37 @@ class Entity:
 
         return np_choice(list(chances.keys()), 1, p=list(chances.values()))[0]
 
-    def _determine_order_volume(self) -> int:
-        return randint(self.min_volume, self.max_volume)
+    def _determine_order_volume(
+        self, instrument: str, order_type: Literal["ASK", "BID"]
+    ) -> int:
+        bid_volume: int = 0
+        ask_volume: int = 0
+
+        for order in self.market:
+            if order.instrument == instrument:
+                bid_volume += order.volume if order.type == "BID" else 0
+                ask_volume += order.volume if order.type == "ASK" else 0
+
+        if ask_volume == 0 and bid_volume == 0:
+            return randint(self.min_volume, self.max_volume)
+
+        # TODO: Not really good at any ratio above > 0.6 but that could be because of the volumes used.
+
+        if order_type == "BID":
+            if (bid_volume / (bid_volume + ask_volume)) < VOLUME_RATIO:
+                return randint(
+                    self.max_volume * 0.8
+                    if self.max_volume * 0.8 > self.min_volume
+                    else self.min_volume,
+                    self.max_volume,
+                )
+            else:
+                return self.min_volume
+
+        return randint(
+            self.min_volume,
+            self.max_volume,
+        )
 
     def _determine_order_price(
         self, instrument: str, is_peak: bool, is_dip: bool
@@ -171,11 +206,12 @@ class Entity:
 
     def generate_order(self, is_peak: bool, is_dip: bool) -> Order:
         instrument = self._determine_order_instrument()
+        order_type = self._determine_order_type(instrument)
         return Order(
             offset=self._generate_order_offset(),
-            type=self._determine_order_type(),
+            type=order_type,
             instrument=instrument,
-            volume=self._determine_order_volume(),
+            volume=self._determine_order_volume(instrument, order_type),
             price=self._determine_order_price(instrument, is_peak, is_dip),
         )
 
@@ -266,6 +302,20 @@ if __name__ == "__main__":
         help=f"The dip offset is with how much an price can relatively decrease at most from the previous order, defaults to '{DIP_OFFSET}'",
         type=float,
         default=DIP_OFFSET,
+    )
+    parser.add_argument(
+        "-t:r",
+        "--type-ratio",
+        help=f"The ratio to which how many orders are of type 'BID' and how many of type 'ASK', 0.5 is equal and less than 0.5 is more 'BID' orders and more than 0.5 is more 'ASK' orders, defaults to '{TYPE_RATIO}'",
+        type=float,
+        default=TYPE_RATIO,
+    )
+    parser.add_argument(
+        "-v:r",
+        "--volume-ratio",
+        help=f"The ratio to how much of the total volume is controlled by 'BID' orders and how much by 'ASK' orders, 0.5 is equal and less than 0.5 is more 'BID' volume and more than 0.5 is more 'ASK' volume, defaults to '{VOLUME_RATIO}'",
+        type=float,
+        default=VOLUME_RATIO,
     )
     parser.add_argument(
         "-min:t",
@@ -359,6 +409,8 @@ if __name__ == "__main__":
     DIP_PROBABILITY = args.dip_probability
     PEAK_OFFSET = args.peak_offset
     DIP_OFFSET = args.dip_offset
+    TYPE_RATIO = args.type_ratio
+    VOLUME_RATIO = args.volume_ratio
 
     entities: List[Entity] = []
     market: List[
@@ -452,10 +504,16 @@ if __name__ == "__main__":
         print(output)
 
     print(
-        f"BID/ASK Spread: {sum([1 for order in market if order.type == 'BID']) / sum([1 for order in market if order.type == 'ASK'])}"
+        f"BID/ASK Spread: {sum([1 for order in market if order.type == 'BID']) / (sum([1 for order in market if order.type == 'ASK']) + sum([1 for order in market if order.type == 'BID']))}"
+    )
+    print(
+        sum([1 for order in market if order.type == "BID"]),
+        sum([1 for order in market if order.type == "ASK"]),
     )
 
-    print(f"VOLUME Spread: ")
+    print(
+        f"VOLUME Spread: {sum([order.volume for order in market if order.type == 'BID']) / (sum([order.volume for order in market if order.type == 'ASK']) + sum([order.volume for order in market if order.type == 'BID']))}"
+    )
 
     instrument_spread: Dict[str, int] = {}
     for order in market:
