@@ -10,3 +10,5 @@ dist
 
 # Other
 trades
+*.png
+images
