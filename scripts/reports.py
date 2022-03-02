@@ -802,13 +802,13 @@ def create_report(
                     total_orders.extend(orders.values())
 
         struct["INSTRUMENTS"] = INSTRUMENTS_STRUCTURE.copy()
-        struct["INSTRUMENTS"].update(
-            {
+        for instrument in exchange_file_json:
+            struct["INSTRUMENTS"][instrument] = {
                 "METRICS": _get_instruments_metrics_struct(
-                    total_orders, *list(exchange_file_json.values())
+                    total_orders, exchange_file_json[instrument]
                 )
             }
-        )
+
         for instrument, exchange_orders in exchange_file_json.items():
             if instrument not in struct["TRADES"]:
                 struct["TRADES"][instrument] = {}

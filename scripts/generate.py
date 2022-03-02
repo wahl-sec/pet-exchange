@@ -13,8 +13,8 @@ import json
 from numpy.random import choice as np_choice
 
 GENERAL_POINT = None
-PEAK_PROBABILITY = 0.3
-DIP_PROBABILITY = 0.3
+PEAK_PROBABILITY = 0.05
+DIP_PROBABILITY = 0.05
 MINIMUM_TRADES = 10
 MAXIMUM_TRADES = 20
 MINIMUM_ENTITIES = 2
@@ -30,8 +30,8 @@ TYPE_RATIO = 0.5
 VOLUME_RATIO = 0.5
 NEXT_ORDER_PEAK_PROBABILITY = 0.4
 NEXT_ORDER_DIP_PROBABILITY = 0.4
-PEAK_OFFSET = 0.2
-DIP_OFFSET = 0.2
+PEAK_OFFSET = 0.05
+DIP_OFFSET = 0.05
 
 
 @dataclass
@@ -191,16 +191,16 @@ class Entity:
             return self.min_price
 
         if is_peak:
-            return latest_order.price * (1 + uniform(0, PEAK_OFFSET))
+            return round(latest_order.price * (1 + uniform(0, PEAK_OFFSET)), 2)
         elif is_dip:
-            return latest_order.price * (1 - uniform(0, DIP_OFFSET))
+            return round(latest_order.price * (1 - uniform(0, DIP_OFFSET)), 2)
         else:
             if GENERAL_POINT is None:
                 return latest_order.price
             elif latest_order.price < GENERAL_POINT:
-                return latest_order.price + uniform(0, PEAK_OFFSET)
+                return round(latest_order.price + uniform(0, PEAK_OFFSET), 2)
             elif latest_order.price > GENERAL_POINT:
-                return latest_order.price - uniform(0, DIP_OFFSET)
+                return round(latest_order.price - uniform(0, DIP_OFFSET), 2)
             else:
                 return latest_order.price
 
