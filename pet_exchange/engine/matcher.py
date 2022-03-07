@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from typing import NoReturn, Dict, Union, Generator, Tuple, List
+from typing import NoReturn, Dict, Union, Generator, Tuple, List, Optional
 from concurrent.futures import ThreadPoolExecutor, Future, as_completed
+from copy import deepcopy, copy
 from datetime import datetime
 from pathlib import Path
-from copy import deepcopy
 import logging
 import json
 
@@ -14,20 +14,9 @@ from Pyfhel import Pyfhel
 import pet_exchange.proto.exchange_pb2 as grpc_buffer
 import pet_exchange.proto.intermediate_pb2 as grpc_buffer_intermediate
 from pet_exchange.exchange.book import EncryptedOrderBook, OrderBook
-from pet_exchange.common.utils import generate_random_int
+from pet_exchange.common.utils import generate_random_int, generate_random_float
 from pet_exchange.common.types import OrderType
-from pet_exchange.common.crypto import (
-    encrypt_int,
-    encrypt_frac,
-    encrypt_add_plain_int,
-    encrypt_add_plain_float,
-    encrypt_add_ciphertext_int,
-    encrypt_add_ciphertext_float,
-    encrypt_sub_plain_int,
-    encrypt_sub_plain_float,
-    encrypt_sub_ciphertext_int,
-    encrypt_sub_ciphertext_float,
-)
+from pet_exchange.common.crypto import BFV, CKKS
 from pet_exchange.utils.logging import TRADE_LOG_LEVEL
 
 logger = logging.getLogger("__main__")
@@ -36,7 +25,7 @@ logger = logging.getLogger("__main__")
 class MatchingEngine:
     __name__ = "Matching-Engine"
 
-    def __init__(self, output: str):
+    def __init__(self, output: str, instruments: List[str]):
         self.book: Dict[str, Union[EncryptedOrderBook, OrderBook]] = {}
         self.keys: Dict[str, bytes] = {}
         self.pyfhel: Dict[str, Pyfhel] = {}
@@ -65,11 +54,20 @@ class MatchingEngine:
             _file.write(json.dumps(_book))
 
     def _match_encrypted(
-        self, instrument: str, book: EncryptedOrderBook
+        self, instrument: str, book: EncryptedOrderBook, scheme: str
     ) -> Tuple[EncryptedOrderBook, List[str], List[str]]:
         bid_queue = book.queue(type=OrderType.BID)
         ask_queue = book.queue(type=OrderType.ASK)
         b_dropped, a_dropped = [], []
+        _scheme_engine: Union[CKKS, BFV] = None
+        if scheme == "bfv":
+            _scheme_engine = BFV(pyfhel=self.pyfhel[instrument])
+        elif scheme == "ckks":
+            _scheme_engine = CKKS(pyfhel=self.pyfhel[instrument])
+        else:
+            raise ValueError(f"Unknown cryptographic scheme type provided: '{scheme}'")
+
+        ZERO_VOLUME = _scheme_engine.encrypt_float(0.0)
 
         try:
             b_identifier, b_order = next(bid_queue)
@@ -102,11 +100,12 @@ class MatchingEngine:
                     )
                     return book, b_dropped, a_dropped
 
-            _price_pad = generate_random_int()
-            b_otp_price, a_otp_price = encrypt_add_plain_float(
-                b_order.price, _price_pad, pyfhel=self.pyfhel[instrument]
-            ), encrypt_add_plain_float(
-                a_order.price, _price_pad, pyfhel=self.pyfhel[instrument]
+            _price_pad = generate_random_float()
+            b_otp_price, a_otp_price = _scheme_engine.encrypt_add_plain_float(
+                b_order.price, _price_pad
+            ), _scheme_engine.encrypt_add_plain_float(
+                a_order.price,
+                _price_pad,
             )
 
             _minimum_otp_price = self._intermediate_channel.GetMinimumValue(
@@ -123,38 +122,39 @@ class MatchingEngine:
                 break
             else:
                 _volume_pad = generate_random_int()
-                b_otp_volume, a_otp_volume = encrypt_add_plain_int(
-                    b_order.volume, _volume_pad, pyfhel=self.pyfhel[instrument]
-                ), encrypt_add_plain_int(
-                    a_order.volume, _volume_pad, pyfhel=self.pyfhel[instrument]
+                b_otp_volume, a_otp_volume = _scheme_engine.encrypt_add_plain_float(
+                    b_order.volume, float(_volume_pad)
+                ), _scheme_engine.encrypt_add_plain_float(
+                    a_order.volume, float(_volume_pad)
                 )
 
                 _minimum_otp_volume = self._intermediate_channel.GetMinimumValue(
                     first=b_otp_volume,
                     second=a_otp_volume,
                     instrument=instrument,
-                    encoding="int",
+                    encoding="float",
                 ).minimum
 
-                _minimum_volume = encrypt_sub_plain_int(
-                    _minimum_otp_volume, _volume_pad, pyfhel=self.pyfhel[instrument]
+                _minimum_volume = _scheme_engine.encrypt_sub_plain_float(
+                    _minimum_otp_volume,
+                    float(_volume_pad),
                 )
 
                 b_order_c, a_order_c = deepcopy(b_order), deepcopy(a_order)
-                if b_order.volume == _minimum_volume:
-                    b_order.volume = encrypt_int(0, pyfhel=self.pyfhel[instrument])
+                if b_otp_volume == _minimum_otp_volume:
+                    b_order.volume = ZERO_VOLUME
                     b_dropped.append(b_identifier)
                 else:
-                    b_order.volume = encrypt_sub_ciphertext_int(
-                        b_order.volume, _minimum_volume, pyfhel=self.pyfhel[instrument]
+                    b_order.volume = _scheme_engine.encrypt_sub_ciphertext_float(
+                        b_order.volume, _minimum_volume
                     )
 
-                if a_order.volume == _minimum_volume:
-                    a_order.volume = encrypt_int(0, pyfhel=self.pyfhel[instrument])
+                if a_otp_volume == _minimum_otp_volume:
+                    a_order.volume = ZERO_VOLUME
                     a_dropped.append(a_identifier)
                 else:
-                    a_order.volume = encrypt_sub_ciphertext_int(
-                        a_order.volume, _minimum_volume, pyfhel=self.pyfhel[instrument]
+                    a_order.volume = _scheme_engine.encrypt_sub_ciphertext_float(
+                        a_order.volume, _minimum_volume
                     )
 
                 logger.log(
@@ -270,7 +270,7 @@ class MatchingEngine:
         self,
         instrument: str,
         book: Union[EncryptedOrderBook, OrderBook],
-        encrypted: bool = True,
+        encrypted: Optional[str],
     ) -> Tuple[Union[EncryptedOrderBook, OrderBook], List[str], List[str]]:
         """Match one iteration of orders agaist each other"""
         # TODO: We should create some sort of safe state to operate on the book since orders can theoretically be added during matching
@@ -315,11 +315,18 @@ class MatchingEngine:
             book.sort(type=OrderType.BID)
             book.sort(type=OrderType.ASK)
 
-        return getattr(self, f"_match{'_encrypted' if encrypted else ''}")(
-            instrument=instrument, book=book
-        )
+        if encrypted is None:
+            return self._match(instrument=instrument, book=book)
+        elif encrypted in ("bfv", "ckks"):
+            return self._match_encrypted(
+                instrument=instrument, book=book, scheme=encrypted
+            )
+        else:
+            raise ValueError(
+                f"Unknown cryptographic scheme type provided: '{encrypted}'"
+            )
 
-    def match(self, encrypted: bool) -> NoReturn:
+    def match(self, encrypted: Optional[str]) -> NoReturn:
         """Continously match incoming orders against each other
         Runs the sub matchers _match and _match_plaintext depending on if the orders are encrypted
         """
@@ -328,13 +335,15 @@ class MatchingEngine:
             while True:
                 try:
                     future_to_match: Dict[Future, str] = {}
-                    for instrument, book in self.book.items():
+
+                    # Shallow copy of book to prevent modifications to the top-level book dictionary while iterating
+                    _book = copy(self.book)
+                    for instrument, book in _book.items():
                         bids = self._cache_bid.setdefault(instrument, 0)
                         asks = self._cache_ask.setdefault(instrument, 0)
                         if bids != book.bid_count or asks != book.ask_count:
                             self._cache_bid[instrument] = book.bid_count
                             self._cache_ask[instrument] = book.ask_count
-
                             future_to_match[
                                 pool.submit(
                                     self._match_orders,

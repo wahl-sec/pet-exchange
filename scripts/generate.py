@@ -458,7 +458,7 @@ if __name__ == "__main__":
         args.instruments = [(INSTRUMENT_NAME, args.minimum_price)]
 
     entity_names: List[str] = []
-    entity_count = randint(args.minimum_entities, args.maximum_entities)
+    entity_count = randint(round(args.minimum_entities), args.maximum_entities)
     for _ in range(entity_count):
         entity: str = "".join([choice(ascii_uppercase) for _ in range(3)])
         while entity in entity_names:
@@ -482,10 +482,16 @@ if __name__ == "__main__":
             )
         )
 
-    output: Dict[str, Any] = {}
+    output: Dict[str, Any] = {"INSTRUMENTS": [], "CLIENTS": {}}
     for entity in generate_orders(entities=entities):
         _entity = vars(entity)
-        output[_entity["entity"]] = [
+        output["INSTRUMENTS"] = list(
+            set(
+                output["INSTRUMENTS"]
+                + [order.instrument for order in _entity["orders"]]
+            )
+        )
+        output["CLIENTS"][_entity["entity"]] = [
             {
                 key: value
                 for key, value in vars(order).items()

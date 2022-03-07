@@ -9,12 +9,6 @@ import pet_exchange.proto.exchange_pb2 as grpc_buffer
 import pet_exchange.proto.exchange_pb2_grpc as grpc_services
 
 from pet_exchange.exchange import OrderType, ExchangeOrderType
-from pet_exchange.common.crypto import (
-    encrypt_sub_ciphertext_int,
-    encrypt_sub_ciphertext_float,
-    encrypt_add_plain_int,
-    encrypt_add_plain_float,
-)
 from pet_exchange.book.book import OrderBook
 from pet_exchange.common.utils import generate_identifier
 from pet_exchange.utils.logging import route_logger

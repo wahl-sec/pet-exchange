@@ -18,7 +18,7 @@ setup(
     python_requires=">=3.9",
     install_requires=[
         "grpcio>=1.43.0",
-        "pyfhel==2.3.1",
+        "pyfhel>=3.0.0b3",
         "grpcio-tools>=1.43.0",
         "matplotlib>=3.5.1",
         "numpy>=1.22.2",

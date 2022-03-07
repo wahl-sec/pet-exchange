@@ -9,6 +9,7 @@ import logging
 from Pyfhel import Pyfhel, PyCtxt
 
 from pet_exchange.proto.intermediate_pb2 import PlaintextOrder, CiphertextOrder
+from pet_exchange.common.crypto import BFV, CKKS, BFV_PARAMETERS, CKKS_PARAMETERS
 
 logger = logging.getLogger("__main__")
 
@@ -20,13 +21,26 @@ class KeyPair:
 
 
 class KeyHandler:
-    def __init__(self, instrument: str):
+    def __init__(self, instrument: str, scheme: str):
         self.instrument: str = instrument
+        self.scheme = scheme
+        # Microsoft has some explanation on the parameters for CKKS
+        # https://github.com/microsoft/SEAL/blob/main/native/examples/4_ckks_basics.cpp#L78
         self.pyfhel: Pyfhel = Pyfhel()
-        self.pyfhel.contextGen(p=65537, flagBatching=True)
+        if scheme == "bfv":
+            self.pyfhel.contextGen(scheme="BFV", **BFV_PARAMETERS)
+        elif scheme == "ckks":
+            self.pyfhel.contextGen(scheme="CKKS", **CKKS_PARAMETERS)
+        else:
+            raise ValueError(f"Unknown cryptographic scheme provided: '{scheme}'")
 
         self._key_pair: KeyPair = None
         self._context = self.pyfhel.to_bytes_context()
+        self._schema_engine: Union[BFV, CKKS] = None
+        if scheme == "bfv":
+            self._schema_engine = BFV(self.pyfhel)
+        elif scheme == "ckks":
+            self._schema_engine = CKKS(self.pyfhel)
 
     @property
     def key_pair(self) -> KeyPair:
@@ -48,8 +62,8 @@ class KeyHandler:
     def _generate_key_pair(self) -> KeyPair:
         self.pyfhel.keyGen()
         self._key_pair = KeyPair(
-            public=self.pyfhel.to_bytes_publicKey(),
-            secret=self.pyfhel.to_bytes_secretKey(),
+            public=self.pyfhel.to_bytes_public_key(),
+            secret=self.pyfhel.to_bytes_secret_key(),
         )
         return self._key_pair
 
@@ -61,8 +75,8 @@ class KeyHandler:
         return CiphertextOrder(
             type=plaintext.type,
             instrument=plaintext.instrument,
-            volume=self.pyfhel.encryptInt(plaintext.volume).to_bytes(),
-            price=self.pyfhel.encryptFrac(plaintext.price).to_bytes(),
+            volume=self._schema_engine.encrypt_int(plaintext.volume),
+            price=self._schema_engine.encrypt_float(plaintext.price),
         )
 
     def decrypt(self, ciphertext: CiphertextOrder) -> PlaintextOrder:
@@ -70,49 +84,12 @@ class KeyHandler:
 
         Raises `ValueError` if the key-pair is not initialized yet
         """
-        _ctx_price: PyCtxt = PyCtxt(
-            serialized=ciphertext.price, encoding="float", pyfhel=self.pyfhel
-        )
-        _ctx_volume: PyCtxt = PyCtxt(
-            serialized=ciphertext.volume, encoding="int", pyfhel=self.pyfhel
-        )
         return PlaintextOrder(
             type=ciphertext.type,
             instrument=ciphertext.instrument,
-            volume=self.pyfhel.decryptInt(_ctx_volume),
-            price=self.pyfhel.decryptFrac(_ctx_price),
+            volume=round(self._schema_engine.decrypt_float(ciphertext.volume)),
+            price=round(self._schema_engine.decrypt_float(ciphertext.price), 2),
         )
-
-    def decrypt_int(self, ciphertext: bytes) -> int:
-        """Decrypt a single ciphertext integer value using the initialized key-pair's secret key
-
-        Raises `ValueError` if the key-pair is not initialized yet
-        """
-        _ctx: PyCtxt = PyCtxt(serialized=ciphertext, encoding="int", pyfhel=self.pyfhel)
-
-        return self.pyfhel.decryptInt(_ctx)
-
-    def decrypt_float(self, ciphertext: bytes) -> float:
-        """Decrypt a single ciphertext floating point value using the initialized key-pair's secret key
-
-        Raises `ValueError` if the key-pair is not initialized yet
-        """
-        _ctx: PyCtxt = PyCtxt(
-            serialized=ciphertext, encoding="float", pyfhel=self.pyfhel
-        )
-
-        return self.pyfhel.decryptFrac(_ctx)
-
-    def decrypt_array(self, ciphertext: bytes) -> List[int]:
-        """Decrypt a single ciphertext array value using the initialized key-pair's secret key
-
-        Raises `ValueError` if the key-pair is not initialized yet
-        """
-        _ctx: PyCtxt = PyCtxt(
-            serialized=ciphertext, encoding="array", pyfhel=self.pyfhel
-        )
-
-        return self.pyfhel.decryptBatch(_ctx)
 
 
 class KeyEngine:
@@ -165,13 +142,13 @@ class KeyEngine:
 
         return handler
 
-    def generate_key_handler(self, instrument: str) -> KeyHandler:
+    def generate_key_handler(self, instrument: str, scheme: str) -> KeyHandler:
         try:
             return self.key_handler(instrument=instrument)
         except KeyError:
             logger.info(
                 f"Intermediate-Keys: Generating new key-pair for instrument: '{instrument}'"
             )
-            handler = KeyHandler(instrument=instrument)
+            handler = KeyHandler(instrument=instrument, scheme=scheme)
             self._save_key_handler(handler=handler, _skip_pre_check=True)
             return handler

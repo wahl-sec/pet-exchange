@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from typing import NoReturn, Dict, Union
+from typing import NoReturn, List, Optional
 from pathlib import Path
 import concurrent.futures
-import asyncio
 import logging
 import json
 
@@ -15,6 +14,7 @@ import pet_exchange.proto.exchange_pb2_grpc as grpc_services
 
 from pet_exchange.exchange import OrderType, ExchangeOrderType
 from pet_exchange.engine.matcher import MatchingEngine
+from pet_exchange.common.crypto import BFV_PARAMETERS, CKKS_PARAMETERS
 from pet_exchange.exchange.client import ExchangeClient
 from pet_exchange.exchange.book import EncryptedOrderBook, OrderBook
 from pet_exchange.utils.logging import route_logger
@@ -33,12 +33,14 @@ class ExchangeServer(grpc_services.ExchangeProtoServicer):
         intermediate_host: str,
         intermediate_port: int,
         matcher: MatchingEngine,
+        instruments: List[str],
     ):
         self.listen_addr = listen_addr
         self._intermediate_host, self._intermediate_port = (
             intermediate_host,
             intermediate_port,
         )
+        self._instruments = instruments
         self._matcher = matcher
 
         self._intermediate_channel = ExchangeClient(
@@ -69,19 +71,32 @@ class ExchangeServer(grpc_services.ExchangeProtoServicer):
             )
 
         _key = await self._intermediate_channel.GetPublicKey(
-            instrument=request.instrument, request=request, context=context
+            instrument=request.instrument,
+            scheme=request.scheme,
+            request=request,
+            context=context,
         )
 
         # TODO: This needs to change if we want to be able to key-switch
         if request.instrument not in self._matcher.pyfhel:
             _pyfhel = Pyfhel()
-            _pyfhel.from_bytes_context(_key.context)
-            _pyfhel.from_bytes_publicKey(_key.public)
+            # _pyfhel.from_bytes_context(_key.context)
+            # _pyfhel.from_bytes_public_key(_key.public)
+            if request.scheme == "bfv":
+                _pyfhel.contextGen(scheme="BFV", **BFV_PARAMETERS)
+            elif request.scheme == "ckks":
+                _pyfhel.contextGen(scheme="CKKS", **CKKS_PARAMETERS)
+            else:
+                raise ValueError(
+                    f"Unknown cryptographic scheme provided: '{request.scheme}'"
+                )
+
+            _pyfhel.from_bytes_public_key(_key.public)
 
             self._matcher.keys[request.instrument] = _key.public
             self._matcher.pyfhel[request.instrument] = _pyfhel
 
-        return grpc_buffer.GetPublicKeyReply(public=_key.public, context=_key.context)
+        return grpc_buffer.GetPublicKeyReply(public=_key.public)
 
     @route_logger(grpc_buffer.AddOrderLimitReply)
     async def AddOrderLimit(
@@ -154,7 +169,7 @@ class ExchangeServer(grpc_services.ExchangeProtoServicer):
         )
 
 
-def _start_matcher(matcher, encrypted: bool) -> NoReturn:
+def _start_matcher(matcher: MatchingEngine, encrypted: Optional[str]) -> NoReturn:
     matcher.match(encrypted=encrypted)
 
 
@@ -163,8 +178,9 @@ async def serve(
     exchange_port: int,
     intermediate_host: str,
     intermediate_port: int,
-    encrypted: bool,
+    encrypted: Optional[str],
     exchange_output: str,
+    instruments: List[str],
 ) -> NoReturn:
     server = grpc.aio.server()
     listen_addr = f"{exchange_host}:{exchange_port}"
@@ -174,7 +190,7 @@ async def serve(
         with _path.open(mode="w+") as _file:
             _file.write(json.dumps({}))  # Clears the file
 
-    matcher = MatchingEngine(output=exchange_output)
+    matcher = MatchingEngine(output=exchange_output, instruments=instruments)
 
     # TODO: Make this variable maybe, like multiple matchers for different books
     #       Alternatively we can make it so that the matcher creates another layer of threads to handle different books.
@@ -192,6 +208,7 @@ async def serve(
             intermediate_host=intermediate_host,
             intermediate_port=intermediate_port,
             matcher=matcher,
+            instruments=instruments,
         )
 
         grpc_services.add_ExchangeProtoServicer_to_server(

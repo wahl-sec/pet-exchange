@@ -571,65 +571,103 @@ def _get_client_metrics_struct(
 
     struct.update(
         {
-            "AVERAGE_TIME_TO_EXCHANGE": sum(
-                [
-                    (
-                        _exchange_times[identifier] - _submit_times[identifier]
-                    ).total_seconds()
-                    for identifier in _exchange_times
-                ]
+            "AVERAGE_TIME_TO_EXCHANGE": (
+                sum(
+                    [
+                        (
+                            _exchange_times[identifier] - _submit_times[identifier]
+                        ).total_seconds()
+                        for identifier in _exchange_times
+                    ]
+                )
+                / len(_exchange_times)
             )
-            / len(_exchange_times),
-            "AVERAGE_TIME_TO_EXCHANGE_BID": sum(
-                [
-                    (
-                        _exchange_times_bid[identifier] - _submit_times_bid[identifier]
-                    ).total_seconds()
-                    for identifier in _exchange_times_bid
-                ]
+            if len(_exchange_times)
+            else None,
+            "AVERAGE_TIME_TO_EXCHANGE_BID": (
+                sum(
+                    [
+                        (
+                            _exchange_times_bid[identifier]
+                            - _submit_times_bid[identifier]
+                        ).total_seconds()
+                        for identifier in _exchange_times_bid
+                    ]
+                )
+                / len(_exchange_times_bid)
             )
-            / len(_exchange_times_bid),
-            "AVERAGE_TIME_TO_EXCHANGE_ASK": sum(
-                [
-                    (
-                        _exchange_times_ask[identifier] - _submit_times_ask[identifier]
-                    ).total_seconds()
-                    for identifier in _exchange_times_ask
-                ]
+            if len(_exchange_times_bid)
+            else None,
+            "AVERAGE_TIME_TO_EXCHANGE_ASK": (
+                sum(
+                    [
+                        (
+                            _exchange_times_ask[identifier]
+                            - _submit_times_ask[identifier]
+                        ).total_seconds()
+                        for identifier in _exchange_times_ask
+                    ]
+                )
+                / len(_exchange_times_ask)
             )
-            / len(_exchange_times_ask),
+            if len(_exchange_times_ask)
+            else None,
             "MAX_TIME_TO_EXCHANGE": (
-                max(_exchange_times.values())
-                - _submit_times[max(_exchange_times, key=_exchange_times.get)]
-            ).total_seconds(),
+                (
+                    max(_exchange_times.values())
+                    - _submit_times[max(_exchange_times, key=_exchange_times.get)]
+                ).total_seconds()
+            )
+            if len(_exchange_times)
+            else None,
             "MAX_TIME_TO_EXCHANGE_BID": (
-                max(_exchange_times_bid.values())
-                - _submit_times_bid[
-                    max(_exchange_times_bid, key=_exchange_times_bid.get)
-                ]
-            ).total_seconds(),
+                (
+                    max(_exchange_times_bid.values())
+                    - _submit_times_bid[
+                        max(_exchange_times_bid, key=_exchange_times_bid.get)
+                    ]
+                ).total_seconds()
+            )
+            if len(_exchange_times_bid)
+            else None,
             "MAX_TIME_TO_EXCHANGE_ASK": (
-                max(_exchange_times_ask.values())
-                - _submit_times_ask[
-                    max(_exchange_times_ask, key=_exchange_times_ask.get)
-                ]
-            ).total_seconds(),
+                (
+                    max(_exchange_times_ask.values())
+                    - _submit_times_ask[
+                        max(_exchange_times_ask, key=_exchange_times_ask.get)
+                    ]
+                ).total_seconds()
+            )
+            if len(_exchange_times_ask)
+            else None,
             "MIN_TIME_TO_EXCHANGE": (
-                min(_exchange_times.values())
-                - _submit_times[min(_exchange_times, key=_exchange_times.get)]
-            ).total_seconds(),
+                (
+                    min(_exchange_times.values())
+                    - _submit_times[min(_exchange_times, key=_exchange_times.get)]
+                ).total_seconds()
+            )
+            if len(_exchange_times)
+            else None,
             "MIN_TIME_TO_EXCHANGE_BID": (
-                min(_exchange_times_bid.values())
-                - _submit_times_bid[
-                    min(_exchange_times_bid, key=_exchange_times_bid.get)
-                ]
-            ).total_seconds(),
+                (
+                    min(_exchange_times_bid.values())
+                    - _submit_times_bid[
+                        min(_exchange_times_bid, key=_exchange_times_bid.get)
+                    ]
+                ).total_seconds()
+            )
+            if len(_exchange_times_bid)
+            else None,
             "MIN_TIME_TO_EXCHANGE_ASK": (
-                min(_exchange_times_ask.values())
-                - _submit_times_ask[
-                    min(_exchange_times_ask, key=_exchange_times_ask.get)
-                ]
-            ).total_seconds(),
+                (
+                    min(_exchange_times_ask.values())
+                    - _submit_times_ask[
+                        min(_exchange_times_ask, key=_exchange_times_ask.get)
+                    ]
+                ).total_seconds()
+            )
+            if len(_exchange_times_ask)
+            else None,
             "TOTAL_MATCHED": len(_matched_bid) + len(_matched_ask),
             "TOTAL_MATCHED_BID": len(_matched_bid),
             "TOTAL_MATCHED_ASK": len(_matched_ask),

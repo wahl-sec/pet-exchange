@@ -17,7 +17,7 @@ import pet_exchange.proto.exchange_pb2 as grpc_buffer
 import pet_exchange.proto.exchange_pb2_grpc as grpc_services
 
 from pet_exchange.exchange import ExchangeOrderType
-from pet_exchange.common.crypto import encrypt_frac, encrypt_int, encrypt_string
+from pet_exchange.common.crypto import BFV_PARAMETERS, CKKS_PARAMETERS, BFV, CKKS
 
 
 def _write_output(output: str, client: str, orders: Dict[str, Any]) -> NoReturn:
@@ -46,7 +46,7 @@ async def client(
     exchange: Tuple[str, int],
     client: str,
     orders: List[Dict[str, Any]],
-    encrypted: bool,
+    encrypted: Optional[str],
     client_output: str,
     exchange_order_type: ExchangeOrderType,
     _start: Optional[int] = None,
@@ -74,7 +74,7 @@ async def client(
                 if exchange_order_type == ExchangeOrderType.LIMIT
                 else stub.AddOrderMarket
             )
-            if encrypted
+            if encrypted is not None
             else (
                 stub.AddOrderLimitPlain
                 if exchange_order_type == ExchangeOrderType.LIMIT
@@ -93,7 +93,7 @@ async def client(
                 if exchange_order_type == ExchangeOrderType.LIMIT
                 else grpc_buffer.AddOrderMarketRequest
             )
-            if encrypted
+            if encrypted is not None
             else (
                 grpc_buffer.AddOrderLimitPlainRequest
                 if exchange_order_type == ExchangeOrderType.LIMIT
@@ -112,7 +112,7 @@ async def client(
                 if exchange_order_type == ExchangeOrderType.LIMIT
                 else grpc_buffer.CiphertextMarketOrder
             )
-            if encrypted
+            if encrypted is not None
             else (
                 grpc_buffer.PlaintextLimitOrder
                 if exchange_order_type == ExchangeOrderType.LIMIT
@@ -121,31 +121,47 @@ async def client(
         )
 
         for order in orders:
-            if encrypted and order["instrument"] not in keys:
+            _scheme_engine: Optional[Union[BFV, CKKS]] = None
+
+            if encrypted is not None and order["instrument"] not in keys:
                 _key = await stub.GetPublicKey(
-                    grpc_buffer.GetPublicKeyRequest(instrument=order["instrument"])
+                    grpc_buffer.GetPublicKeyRequest(
+                        instrument=order["instrument"], scheme=encrypted
+                    )
                 )
                 _pyfhel = Pyfhel()
-                _pyfhel.from_bytes_context(_key.context)
-                _pyfhel.from_bytes_publicKey(_key.public)
-                keys[order["instrument"]] = _pyfhel
+                if encrypted == "bfv":
+                    _pyfhel.contextGen(scheme="BFV", **BFV_PARAMETERS)
+                elif encrypted == "ckks":
+                    _pyfhel.contextGen(scheme="CKKS", **CKKS_PARAMETERS)
+                else:
+                    raise ValueError(
+                        f"Unknown cryptographic scheme provided: '{encrypted}'"
+                    )
+                _pyfhel.from_bytes_public_key(_key.public)
 
-            if encrypted:
+                if encrypted == "bfv":
+                    _scheme_engine = BFV(pyfhel=_pyfhel)
+                elif encrypted == "ckks":
+                    _scheme_engine = CKKS(pyfhel=_pyfhel)
+
+                keys[order["instrument"]] = (_pyfhel, _scheme_engine)
+
+            if encrypted is not None:
+                _, _scheme_engine = keys[order["instrument"]]
                 _processed_order = _order(
                     **{
                         "instrument": order["instrument"],
                         "type": order["type"],
-                        "entity": encrypt_string(
-                            client, pyfhel=keys[order["instrument"]]
-                        ),
-                        "volume": encrypt_int(
-                            value=order["volume"], pyfhel=keys[order["instrument"]]
+                        "entity": _scheme_engine.encrypt_string(client),
+                        "volume": _scheme_engine.encrypt_float(
+                            value=float(order["volume"]),
                         ),
                     },
                     **(
                         {
-                            "price": encrypt_frac(
-                                value=order["price"], pyfhel=keys[order["instrument"]]
+                            "price": _scheme_engine.encrypt_float(
+                                value=float(order["price"]),
                             )
                         }
                         if exchange_order_type == ExchangeOrderType.LIMIT
@@ -171,7 +187,7 @@ async def client(
 
             while (
                 _start is not None
-                and order.get("offset")
+                and order.get("offset") is not None
                 and time.time() - _start <= float(order.get("offset"))
             ):
                 pass  # Wait until offset has finished

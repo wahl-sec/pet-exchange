@@ -137,11 +137,11 @@ message AddOrderMarketPlainReply {
 // Request the public key for a given instrument
 message GetPublicKeyRequest {
     string instrument = 1;
+    string scheme = 2;
 }
 
 message GetPublicKeyReply {
     bytes public = 1;
-    bytes context = 2;
 }
 
 // GetMinimumValueRequest

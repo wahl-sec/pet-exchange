@@ -14,6 +14,7 @@ async def client(host: Tuple[str, int]) -> NoReturn:
     addr, port = host
     async with grpc.aio.insecure_channel(f"{addr}:{port}") as channel:
         stub = grpc_services.IntermediateProtoStub(channel)
+        # TODO: Is this used?
         response = await stub.KeyGen(grpc_buffer.KeyGenRequest(instrument="NSDQ"))
 
 

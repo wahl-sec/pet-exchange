@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import uuid
-from random import randint
+from random import randint, uniform
 
 
 def generate_identifier() -> str:
@@ -10,4 +10,8 @@ def generate_identifier() -> str:
 
 
 def generate_random_int() -> int:
-    return randint(100, 100000)
+    return randint(100, 200)
+
+
+def generate_random_float() -> float:
+    return round(uniform(100, 200), 2)

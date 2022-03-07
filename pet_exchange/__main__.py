@@ -43,6 +43,7 @@ SERVER_VARIABLES = {
         "intermediate_host",
         "intermediate_port",
         "plaintext",
+        "cryptographic",
         "exchange_output",
     ],
     "intermediate": [
@@ -51,6 +52,7 @@ SERVER_VARIABLES = {
         "exchange_host",
         "exchange_port",
         "plaintext",
+        "cryptographic",
     ],
 }
 
@@ -110,12 +112,12 @@ def _resolve_client_information_files(args) -> Dict[str, Dict[str, Any]]:
     for _path in _paths:
         logger.info(f"Main: Loading orders from: '{str(_path)}' ... ")
         with _path.open(mode="r") as _orders:
-            for client, orders in json.load(_orders).items():
+            for client, orders in json.load(_orders)["CLIENTS"].items():
                 _clients[client] = {
                     "ORDERS": orders,
                     "EXCHANGE_HOST": args.exchange_host,
                     "EXCHANGE_PORT": args.exchange_port,
-                    "ENCRYPTED": not args.plaintext,
+                    "ENCRYPTED": None if args.plaintext else args.cryptographic,
                     "CLIENT_OUTPUT": args.client_output,
                     "USE_OFFSET": args.client_offset,
                     "EXCHANGE_ORDER_TYPE": args.client_order_type
@@ -141,6 +143,22 @@ def _resolve_client_information_files(args) -> Dict[str, Dict[str, Any]]:
     logger.info(f"Main: Loaded ({_total}) orders from all clients to be replayed ...")
 
     return _clients
+
+
+def get_instruments(files: List[str]) -> List[str]:
+    instruments: List[str] = []
+    for path in files:
+        _path = Path(path)
+        if not _path.exists():
+            raise FileNotFoundError
+
+        with _path.open(mode="r") as file_obj:
+            struct = json.load(file_obj)
+            for instrument in struct["INSTRUMENTS"]:
+                if instrument not in instruments:
+                    instruments.append(instrument)
+
+    return instruments
 
 
 async def start(args: Namespace):
@@ -173,9 +191,23 @@ async def start(args: Namespace):
                     if key in SERVER_VARIABLES[_component] and key != arg
                 }
 
-                # Rename to encrypted just for consistency
-                _servers[arg]["encrypted"] = not _servers[arg]["plaintext"]
+                if args.exchange_instruments:
+                    _servers[arg]["instruments"] = args.exchange_instruments
+                elif args.client_input_files:
+                    _servers[arg]["instruments"] = get_instruments(
+                        args.client_input_files
+                    )
+                else:
+                    _servers[arg]["instruments"] = None
+
+                # Derive mode of the exchange, plaintext or cryptographic
+                _servers[arg]["encrypted"] = (
+                    None
+                    if _servers[arg]["plaintext"]
+                    else _servers[arg]["cryptographic"]
+                )
                 del _servers[arg]["plaintext"]
+                del _servers[arg]["cryptographic"]
 
             pool.map(
                 _start_server,
@@ -186,8 +218,12 @@ async def start(args: Namespace):
                 _start_client,
                 ((client, config) for client, config in _clients.items()),
             )
+
     except KeyboardInterrupt as exc:
         logger.info("Killing all components ...")
+        raise exc from None
+    except Exception as exc:
+        logger.error("Unknown exception occured when starting components")
         raise exc from None
 
 
@@ -208,6 +244,13 @@ if __name__ == "__main__":
         "--plaintext",
         help="Run the exchange in plaintext mode",
         action="store_true",
+    )
+    parser.add_argument(
+        "-c",
+        "--cryptographic",
+        help="Run the exchange in cryptographic mode wíth a given scheme, defaults to bfv",
+        choices=("bfv", "ckks"),
+        default="bfv",
     )
 
     exchange = parser.add_argument_group("Exchange")
@@ -236,6 +279,15 @@ if __name__ == "__main__":
         "--exchange-output",
         help="Path to the file where the output of the exchange's performed order list together with the assigned identifier and a timestamp should be stored",
         type=str,
+        default=None,
+    )
+    exchange.add_argument(
+        "-e:i",
+        "--exchange-instruments",
+        help="The instruments to allow orders for, this will also be used in the cryptographic version to generate keys for each instrument"
+        "If it is not provided then the instruments will be derived from the client input files, and if those are not available the keys will be generated on the fly",
+        type=str,
+        nargs="+",
         default=None,
     )
 
@@ -323,3 +375,5 @@ if __name__ == "__main__":
         asyncio.run(start(args))
     except KeyboardInterrupt:
         logger.info("PET-Exchange killed ...")
+    except Exception as e:
+        print(e)

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from typing import NoReturn
+from typing import NoReturn, List, Optional
 import logging
 
 import grpc
@@ -20,24 +20,37 @@ logger = logging.getLogger("__main__")
 class IntermediateServer(grpc_services.IntermediateProtoServicer):
     __name__ = "Intermediate-Server"
 
-    def __init__(self, listen_addr: str, exchange_host: str, exchange_port: int):
+    def __init__(
+        self,
+        listen_addr: str,
+        exchange_host: str,
+        exchange_port: int,
+        instruments: List[str],
+        encrypted: str,
+    ):
         self.listen_addr = listen_addr
+        self.scheme = encrypted
         self._exchange_host, self._exchange_port = (exchange_host, exchange_port)
 
         self._exchange_channel = grpc.aio.insecure_channel(
             f"{self._exchange_host}:{self._exchange_port}"
         )
         self._key_engine = KeyEngine()
+        for instrument in instruments:
+            self._key_engine.generate_key_handler(
+                instrument=instrument, scheme=self.scheme
+            )
+
         super(grpc_services.IntermediateProtoServicer).__init__()
 
     @route_logger(grpc_buffer.KeyGenReply)
     async def KeyGen(
         self, request: grpc_buffer.KeyGenRequest, context: grpc.aio.ServicerContext
     ) -> grpc_buffer.KeyGenReply:
-        handler = self._key_engine.generate_key_handler(instrument=request.instrument)
-        return grpc_buffer.KeyGenReply(
-            public=handler.key_pair.public, context=handler.context
+        handler = self._key_engine.generate_key_handler(
+            instrument=request.instrument, scheme=self.scheme
         )
+        return grpc_buffer.KeyGenReply(public=handler.key_pair.public)
 
     @route_logger(grpc_buffer.EncryptOrderReply)
     async def EncryptOrder(
@@ -68,21 +81,12 @@ class IntermediateServer(grpc_services.IntermediateProtoServicer):
         context: grpc.aio.ServicerContext,
     ) -> grpc_buffer.DecryptOrderReply:
         handler = self._key_engine.key_handler(instrument=request.order.instrument)
-
         return grpc_buffer.DecryptOrderReply(
             order=handler.decrypt(ciphertext=request.order),
-            entity_bid="".join(
-                chr(ch)
-                for ch in handler.decrypt_array(ciphertext=request.entity_bid)
-                if ch
-            )
+            entity_bid=handler._schema_engine.decrypt_string(request.entity_bid)
             if hasattr(request, "entity_bid")
             else None,
-            entity_ask="".join(
-                chr(ch)
-                for ch in handler.decrypt_array(ciphertext=request.entity_ask)
-                if ch  # This will skip 0 (terminator) values, maybe we need to have a better solution?
-            )
+            entity_ask=handler._schema_engine.decrypt_string(request.entity_ask)
             if hasattr(request, "entity_ask")
             else None,
         )
@@ -113,7 +117,9 @@ class IntermediateServer(grpc_services.IntermediateProtoServicer):
         self, request: grpc_buffer.GetMinimumValueRequest, context: grpc.ServicerContext
     ) -> grpc_buffer.GetMinimumValueReply:
         handler = self._key_engine.key_handler(instrument=request.instrument)
-        if handler.decrypt_float(request.first) < handler.decrypt_float(request.second):
+        if handler._schema_engine.decrypt_float(
+            request.first
+        ) < handler._schema_engine.decrypt_float(request.second):
             return grpc_buffer.GetMinimumValueReply(minimum=request.first)
         else:
             return grpc_buffer.GetMinimumValueReply(minimum=request.second)
@@ -124,7 +130,8 @@ async def serve(
     intermediate_port: int,
     exchange_host: str,
     exchange_port: int,
-    encrypted: bool,
+    encrypted: Optional[str],
+    instruments: List[str],
 ) -> NoReturn:
     server = grpc.aio.server()
 
@@ -134,6 +141,8 @@ async def serve(
             listen_addr=listen_addr,
             exchange_host=exchange_host,
             exchange_port=exchange_port,
+            instruments=instruments,
+            encrypted=encrypted,
         ),
         server,
     )

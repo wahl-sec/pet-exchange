@@ -76,20 +76,27 @@ def validate_executed(path_clients: List[str], path_exchange: str) -> bool:
         exchange_file_json = json.load(exchange_file)
 
         total_orders: Dict[str, Any] = {}
+        total_orders_results: Dict[str, bool] = {}
+
         with _path_client.open(mode="r") as client_file:
             client_file_json = json.load(client_file)
             for client, orders in client_file_json["CLIENTS"].items():
                 for identifier, order in orders.items():
                     total_orders[identifier] = order
+                    total_orders_results[identifier] = True
 
             print(f"Validating exchange for executed orders for clients")
             for instrument, executed_orders in exchange_file_json.items():
                 for executed_identifier, executed_order in executed_orders.items():
                     for order_type in executed_order["references"].keys():
                         if executed_order["references"][order_type] not in total_orders:
-                            raise ValueError(
-                                f"Executed order reference: '{executed_identifier}' for order '{executed_order['references'][order_type]}' not in client: '{client}' orders"
+                            print(
+                                f"Executed order reference: '{executed_identifier}' for order '{executed_order['references'][order_type]}' not in client: '{executed_order['entity'][order_type]}' orders"
                             )
+                            total_orders_results[
+                                executed_order["references"][order_type]
+                            ] = False
+                            continue
 
                         total_orders[executed_order["references"][order_type]][
                             "volume"
@@ -100,25 +107,41 @@ def validate_executed(path_clients: List[str], path_exchange: str) -> bool:
                             ]
                             < 0
                         ):
-                            raise ValueError(
-                                f"Executed order reference: '{executed_identifier}' for order: '{executed_order['references'][order_type]}' resulted in a volume < 0"
+                            print(
+                                f"Executed order reference: '{executed_identifier}' for order: '{executed_order['references'][order_type]}' resulted in a volume < 0 ({total_orders[executed_order['references'][order_type]]['volume']})"
                             )
+                            total_orders_results[
+                                executed_order["references"][order_type]
+                            ] = False
+                            continue
 
                     if (
                         executed_order["performed"]["price"]
                         != total_orders[executed_order["references"]["ask"]]["price"]
                     ):
-                        raise ValueError(
-                            f"Executed order: '{executed_identifier}' performed price was not the ASK price for order: '{executed_order['references']['ask']}'"
+                        print(
+                            f"Executed order: '{executed_identifier}' performed price: ({executed_order['performed']['price']}) was not the ASK price: ({total_orders[executed_order['references']['ask']]['price']}) for order: '{executed_order['references']['ask']}'"
                         )
+                        total_orders_results[
+                            executed_order["references"][order_type]
+                        ] = False
+                        continue
 
                     if (
                         executed_order["performed"]["price"]
                         > total_orders[executed_order["references"]["bid"]]["price"]
                     ):
-                        raise ValueError(
-                            f"Executed order: '{executed_identifier}' performed price was greater than the BID price for order: '{executed_order['references']['bid']}'"
+                        print(
+                            f"Executed order: '{executed_identifier}' performed price: ({executed_order['performed']['price']}) was greater than the BID price: ({total_orders[executed_order['references']['bid']]['price']}) for order: '{executed_order['references']['bid']}'"
                         )
+                        total_orders_results[
+                            executed_order["references"][order_type]
+                        ] = False
+                        continue
+
+    print(
+        f"Correct Count: ({len(list(filter(lambda _: _, total_orders_results.values())))}), Wrong Count: ({len(list(filter(lambda _: not _, total_orders_results.values())))})"
+    )
 
     return True
 

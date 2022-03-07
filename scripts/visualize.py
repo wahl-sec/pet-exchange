@@ -38,5 +38,5 @@ if __name__ == "__main__":
     with _path.open(mode="r") as file_obj:
         data = json.load(file_obj)
 
-    for client, orders in data.items():
+    for client, orders in data["CLIENTS"].items():
         visualize(orders, "price", client)
