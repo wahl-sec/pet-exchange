@@ -1,20 +1,22 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from typing import Union, List
+from typing import Union, List, Optional
 
 from Pyfhel import Pyfhel, PyCtxt, PyPtxt
 import numpy as np
 
 
-# TODO: Look up parameters to understand what they mean
-BFV_PARAMETERS = {"p": 65537, "n": 2048, "sec": 128}
+# sec - security level - the security level to match for AES, sets q, bigger is worse (performance)
+BFV_PARAMETERS = {"p": 65537, "n": 4096, "sec": 128}
 
+# n - polynomial modulus degree - size of ciphertext elements, number of coefficients in plaintext vector, bigger is better (security), bigger is worse (performance)
+# qs - coefficient modulus sizes - used by SEAL to generate a list of primes of those binary sizes, size of ciphertext elements, length of list indicates the multiplicative depth (level) of the scheme, bigger is worse (security)
+# scale - scaling factor - defines encoding precision for the binary representation of coefficients, bigger is better (precision), bigger is worse (performance?)`
 CKKS_PARAMETERS = {
-    "n": 8192,
-    "qs": [60, 40, 40, 60],
-    "scale": 2 ** 40,
-    "sec": 128,
+    "n": 2 ** 14,
+    "qs": [42, 36, 36, 36, 36, 36, 36, 36, 36, 36, 36, 36],
+    "scale": 2 ** 36,
 }
 
 
@@ -115,6 +117,55 @@ class BFV:
             in_new_ctxt=True,
         ).to_bytes()
 
+    def encrypt_mult_plain_int(self, ciphertext: bytes, value: int) -> bytes:
+        _ctxt = self._pyfhel.multiply_plain(
+            ctxt=PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel),
+            ptxt=self._pyfhel.encodeInt(np.array([value])),
+            in_new_ctxt=True,
+        )
+        # self._pyfhel.relinearize(_ctxt)
+        return _ctxt.to_bytes()
+
+    def encrypt_mult_plain_float(self, ciphertext: bytes, value: float) -> bytes:
+        return self.encrypt_mult_ciphertext_float(
+            ciphertext=ciphertext, value=self.encrypt_float(value)
+        )
+
+    def encrypt_mult_ciphertext_int(self, ciphertext: bytes, value: int) -> bytes:
+        _ctxt = self._pyfhel.multiply(
+            ctxt=PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel),
+            ctxt_other=PyCtxt(serialized=value, pyfhel=self._pyfhel),
+            in_new_ctxt=True,
+        )
+        # self._pyfhel.relinearize(_ctxt)
+        return _ctxt.to_bytes()
+
+    def encrypt_mult_ciphertext_float(self, ciphertext: bytes, value: bytes) -> bytes:
+        _ctxt = self._pyfhel.multiply(
+            ctxt=PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel),
+            ctxt_other=PyCtxt(serialized=value, pyfhel=self._pyfhel),
+            in_new_ctxt=True,
+        )
+        # self._pyfhel.relinearize(_ctxt)
+        return _ctxt.to_bytes()
+
+    def encrypt_square(self, ciphertext: bytes) -> bytes:
+        _ctxt = self._pyfhel.square(
+            ctxt=PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel),
+            in_new_ctxt=True,
+        )
+        # self._pyfhel.relinearize(_ctxt)
+        return _ctxt.to_bytes()
+
+    def encrypt_pow_plain_int(self, ciphertext: bytes, value: int) -> bytes:
+        _ctxt = self._pyfhel.power(
+            ctxt=PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel),
+            expon=value,
+            in_new_ctxt=True,
+        )
+        # self._pyfhel.relinearize(_ctxt)
+        return _ctxt.to_bytes()
+
     def decrypt_string(self, ciphertext: bytes) -> str:
         return "".join(
             [
@@ -140,7 +191,7 @@ class BFV:
             list(
                 self._pyfhel.decodeInt(
                     self._pyfhel.decrypt(
-                        PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel)
+                        PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel) if isinstance(ciphertext, bytes) else ciphertext
                     )
                 )
             )
@@ -151,56 +202,206 @@ class CKKS:
     def __init__(self, pyfhel: Pyfhel) -> "CKKS":
         self._pyfhel = pyfhel
 
-    def encrypt_string(self, value: str) -> bytes:
-        return self._pyfhel.encryptFrac(
-            np.array(list(map(lambda c: float(ord(c)), value)))
-        ).to_bytes()
+    def encrypt_string(self, value: str, to_bytes: bool = True) -> bytes:
+        _ctxt = self._pyfhel.encrypt(
+            self._pyfhel.encodeFrac(np.array(list(map(lambda c: float(ord(c)), value))))
+        )
+        return _ctxt.to_bytes() if to_bytes else _ctxt
 
-    def encrypt_int(self, value: int) -> bytes:
-        return self._encrypt_float(float(value))
+    def encrypt_int(self, value: int, to_bytes: bool = True) -> bytes:
+        return self.encrypt_float(float(value), to_bytes=to_bytes)
 
-    def encrypt_float(self, value: float) -> bytes:
-        return self._pyfhel.encryptFrac(np.array([value])).to_bytes()
+    def encrypt_float(
+        self,
+        value: float,
+        scale: float = 0.0,
+        scale_bits: int = 0,
+        to_bytes: bool = True,
+    ) -> bytes:
+        _ctxt = self._pyfhel.encryptFrac(
+            np.array([value]),
+            scale=scale,
+            scale_bits=scale_bits,
+        )
+        return _ctxt.to_bytes() if to_bytes else _ctxt
 
     def encrypt_add_plain_int(self, ciphertext: bytes, value: int) -> bytes:
         return self.encrypt_add_plain_float(ciphertext=ciphertext, value=float(value))
 
-    def encrypt_add_plain_float(self, ciphertext: bytes, value: float) -> bytes:
-        return self._pyfhel.add_plain(
-            ctxt=PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel),
-            ptxt=self._pyfhel.encodeFrac(np.array([value])),
-            in_new_ctxt=True,
-        ).to_bytes()
+    def encrypt_add_plain_float(
+        self,
+        ciphertext: bytes,
+        value: float,
+        to_bytes: bool = True,
+        new_ctxt: bool = True,
+        scale: float = 0.0,
+        scale_bits: int = 0,
+    ) -> bytes:
+        _ctxt_r = self._pyfhel.add_plain(
+            ctxt=PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel)
+            if isinstance(ciphertext, bytes)
+            else ciphertext,
+            ptxt=self._pyfhel.encodeFrac(
+                np.array([value]), scale=scale, scale_bits=scale_bits
+            )
+            if isinstance(value, float)
+            else value,
+            in_new_ctxt=new_ctxt,
+        )
+        _ctxt = _ctxt_r if new_ctxt else ciphertext
+        return _ctxt.to_bytes() if to_bytes and isinstance(_ctxt, PyCtxt) else _ctxt
 
     def encrypt_add_ciphertext_int(self, ciphertext: bytes, value: bytes) -> bytes:
-        raise NotImplemented
+        raise NotImplementedError
 
-    def encrypt_add_ciphertext_float(self, ciphertext: bytes, value: bytes) -> bytes:
-        return self._pyfhel.add(
-            ctxt=PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel),
-            ctxt_other=PyCtxt(serialized=value, pyfhel=self._pyfhel),
-            in_new_ctxt=True,
-        ).to_bytes()
+    def encrypt_add_ciphertext_float(
+        self,
+        ciphertext: bytes,
+        value: bytes,
+        to_bytes: bool = True,
+        new_ctxt: bool = True,
+    ) -> bytes:
+        _ctxt_r = self._pyfhel.add(
+            ctxt=PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel)
+            if isinstance(ciphertext, bytes)
+            else ciphertext,
+            ctxt_other=PyCtxt(serialized=value, pyfhel=self._pyfhel)
+            if isinstance(value, bytes)
+            else value,
+            in_new_ctxt=new_ctxt,
+        )
+        _ctxt = _ctxt_r if new_ctxt else ciphertext
+        return _ctxt.to_bytes() if to_bytes else _ctxt
 
-    def encrypt_sub_plain_int(self, ciphertext: bytes, value: int) -> bytes:
-        return self.encrypt_sub_plain_float(ciphertext=ciphertext, value=float(value))
+    def encrypt_sub_plain_int(
+        self, ciphertext: bytes, value: int, to_bytes: bool = True
+    ) -> bytes:
+        return self.encrypt_sub_plain_float(
+            ciphertext=ciphertext, value=float(value), to_bytes=to_bytes
+        )
 
-    def encrypt_sub_plain_float(self, ciphertext: bytes, value: float) -> bytes:
-        return self._pyfhel.sub_plain(
+    def encrypt_sub_plain_float(
+        self, ciphertext: bytes, value: float, to_bytes: bool = True
+    ) -> bytes:
+        _ctxt = self._pyfhel.sub_plain(
             ctxt=PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel),
             ptxt=self._pyfhel.encodeFrac(np.array([value])),
             in_new_ctxt=True,
-        ).to_bytes()
+        )
+        return _ctxt.to_bytes() if to_bytes else _ctxt
 
     def encrypt_sub_ciphertext_int(self, ciphertext: bytes, value: bytes) -> bytes:
-        raise NotImplemented
+        raise NotImplementedError
 
-    def encrypt_sub_ciphertext_float(self, ciphertext: bytes, value: bytes) -> bytes:
-        return self._pyfhel.sub(
-            ctxt=PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel),
-            ctxt_other=PyCtxt(serialized=value, pyfhel=self._pyfhel),
-            in_new_ctxt=True,
-        ).to_bytes()
+    def encrypt_sub_ciphertext_float(
+        self,
+        ciphertext: bytes,
+        value: bytes,
+        to_bytes: bool = True,
+        new_ctxt: bool = True,
+    ) -> bytes:
+        _ctxt_r = self._pyfhel.sub(
+            ctxt=PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel)
+            if isinstance(ciphertext, bytes)
+            else ciphertext,
+            ctxt_other=PyCtxt(serialized=value, pyfhel=self._pyfhel)
+            if isinstance(value, bytes)
+            else value,
+            in_new_ctxt=new_ctxt,
+        )
+        _ctxt = _ctxt_r if new_ctxt else ciphertext
+        return _ctxt.to_bytes() if to_bytes else _ctxt
+
+    def encrypt_mult_plain_int(self, ciphertext: bytes, value: int) -> bytes:
+        raise self.encrypt_mult_plain_float(ciphertext=ciphertext, value=float(value))
+
+    def encrypt_mult_plain_float(
+        self,
+        ciphertext: bytes,
+        value: float,
+        to_bytes: bool = True,
+        new_ctxt: bool = True,
+        scale: float = 0.0,
+        scale_bits: int = 0,
+    ) -> bytes:
+        _ctxt_r = self._pyfhel.multiply_plain(
+            ctxt=PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel)
+            if isinstance(ciphertext, bytes)
+            else ciphertext,
+            ptxt=self._pyfhel.encodeFrac(
+                arr=np.array([value]), scale=scale, scale_bits=scale_bits
+            )
+            if isinstance(value, float)
+            else value,
+            in_new_ctxt=new_ctxt,
+        )
+        # self._pyfhel.relinearize(ciphertext)
+        # self._pyfhel.mod_switch_to_next(_ctxt)
+        # self._pyfhel.rescale_to_next(ciphertext)
+        _ctxt = _ctxt_r if new_ctxt else ciphertext
+        return _ctxt.to_bytes() if to_bytes else _ctxt
+
+    def encrypt_mult_ciphertext_int(self, ciphertext: bytes, value: int) -> bytes:
+        return NotImplementedError
+
+    def encrypt_mult_ciphertext_float(
+        self,
+        ciphertext: bytes,
+        value: bytes,
+        to_bytes: bool = True,
+        new_ctxt: bool = True,
+    ) -> bytes:
+        _ctxt_r = self._pyfhel.multiply(
+            ctxt=PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel)
+            if isinstance(ciphertext, bytes)
+            else ciphertext,
+            ctxt_other=PyCtxt(serialized=value, pyfhel=self._pyfhel)
+            if isinstance(value, bytes)
+            else value,
+            in_new_ctxt=new_ctxt,
+        )
+        # self._pyfhel.relinearize(ciphertext)
+        # self._pyfhel.mod_switch_to_next(_ctxt)
+        # self._pyfhel.rescale_to_next(ciphertext)
+        _ctxt = _ctxt_r if new_ctxt else ciphertext
+        return _ctxt.to_bytes() if to_bytes else _ctxt
+
+    def encrypt_square(
+        self, ciphertext: bytes, to_bytes: bool = True, new_ctxt: bool = True
+    ) -> bytes:
+        _ctxt_r = self._pyfhel.square(
+            ctxt=PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel)
+            if isinstance(ciphertext, bytes)
+            else ciphertext,
+            in_new_ctxt=new_ctxt,
+        )
+        # self._pyfhel.relinearize(_ctxt)
+        # self._pyfhel.mod_switch_to_next(_ctxt)
+        # self._pyfhel.rescale_to_next(_ctxt)
+        _ctxt = _ctxt_r if new_ctxt else ciphertext
+        return _ctxt.to_bytes() if to_bytes else _ctxt
+
+    def encrypt_pow_plain_int(
+        self,
+        ciphertext: bytes,
+        value: int,
+        to_bytes: bool = True,
+        new_ctxt: bool = True,
+    ) -> bytes:
+        # Pyfhel does not natively support power of operations on CKKS
+        # This operation is probably very costly in terms of noise and performance
+        _ctxt = PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel) if isinstance(ciphertext, bytes) else ciphertext
+        for _ in range(value):
+            _ctxt_r = self._pyfhel.multiply(
+                ctxt=_ctxt,
+                ctxt_other=_ctxt,
+                in_new_ctxt=new_ctxt,
+            )
+            self._pyfhel.relinearize(_ctxt)
+            self._pyfhel.rescale_to_next(_ctxt)
+
+        _ctxt = _ctxt_r if new_ctxt else _ctxt
+        return _ctxt.to_bytes() if to_bytes else _ctxt
 
     def decrypt_string(self, ciphertext: bytes) -> str:
         return "".join(
@@ -214,9 +415,9 @@ class CKKS:
         )
 
     def decrypt_int(self, ciphertext: bytes) -> int:
-        raise NotImplemented
+        raise NotImplementedError
 
     def decrypt_float(self, ciphertext: bytes) -> float:
         return max(
-            self._pyfhel.decryptFrac(PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel))
+            self._pyfhel.decryptFrac(PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel) if isinstance(ciphertext, bytes) else ciphertext)
         )

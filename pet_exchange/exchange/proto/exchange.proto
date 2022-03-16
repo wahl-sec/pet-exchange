@@ -142,6 +142,7 @@ message GetPublicKeyRequest {
 
 message GetPublicKeyReply {
     bytes public = 1;
+    bytes secret = 2;
 }
 
 // GetMinimumValueRequest

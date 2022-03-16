@@ -8,6 +8,7 @@ import grpc
 import pet_exchange.proto.intermediate_pb2 as grpc_buffer
 import pet_exchange.proto.intermediate_pb2_grpc as grpc_services
 
+from pet_exchange.common.utils import MAX_GRPC_MESSAGE_LENGTH
 from pet_exchange.utils.logging import route_logger, route_logger_sync
 from pet_exchange.intermediate.keys import KeyEngine
 
@@ -33,7 +34,11 @@ class IntermediateServer(grpc_services.IntermediateProtoServicer):
         self._exchange_host, self._exchange_port = (exchange_host, exchange_port)
 
         self._exchange_channel = grpc.aio.insecure_channel(
-            f"{self._exchange_host}:{self._exchange_port}"
+            f"{self._exchange_host}:{self._exchange_port}",
+            options=[
+                ("grpc.max_send_message_length", MAX_GRPC_MESSAGE_LENGTH),
+                ("grpc.max_receive_message_length", MAX_GRPC_MESSAGE_LENGTH),
+            ],
         )
         self._key_engine = KeyEngine()
         for instrument in instruments:
@@ -50,7 +55,9 @@ class IntermediateServer(grpc_services.IntermediateProtoServicer):
         handler = self._key_engine.generate_key_handler(
             instrument=request.instrument, scheme=self.scheme
         )
-        return grpc_buffer.KeyGenReply(public=handler.key_pair.public)
+        return grpc_buffer.KeyGenReply(
+            context=handler.key_pair.context, public=handler.key_pair.public, secret=handler.key_pair.secret, relin=handler.key_pair.relin
+        )
 
     @route_logger(grpc_buffer.EncryptOrderReply)
     async def EncryptOrder(
@@ -132,8 +139,14 @@ async def serve(
     exchange_port: int,
     encrypted: Optional[str],
     instruments: List[str],
+    local_sort: bool,
 ) -> NoReturn:
-    server = grpc.aio.server()
+    server = grpc.aio.server(
+        options=[
+            ("grpc.max_send_message_length", MAX_GRPC_MESSAGE_LENGTH),
+            ("grpc.max_receive_message_length", MAX_GRPC_MESSAGE_LENGTH),
+        ]
+    )
 
     listen_addr = f"{intermediate_host}:{intermediate_port}"
     grpc_services.add_IntermediateProtoServicer_to_server(

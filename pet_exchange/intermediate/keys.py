@@ -16,8 +16,10 @@ logger = logging.getLogger("__main__")
 
 @dataclass
 class KeyPair:
+    context: bytes
     public: bytes
     secret: bytes
+    relin: bytes
 
 
 class KeyHandler:
@@ -27,12 +29,16 @@ class KeyHandler:
         # Microsoft has some explanation on the parameters for CKKS
         # https://github.com/microsoft/SEAL/blob/main/native/examples/4_ckks_basics.cpp#L78
         self.pyfhel: Pyfhel = Pyfhel()
-        if scheme == "bfv":
-            self.pyfhel.contextGen(scheme="BFV", **BFV_PARAMETERS)
-        elif scheme == "ckks":
-            self.pyfhel.contextGen(scheme="CKKS", **CKKS_PARAMETERS)
-        else:
-            raise ValueError(f"Unknown cryptographic scheme provided: '{scheme}'")
+        try:
+            if scheme == "bfv":
+                self.pyfhel.contextGen(scheme="BFV", **BFV_PARAMETERS)
+            elif scheme == "ckks":
+                self.pyfhel.contextGen(scheme="CKKS", **CKKS_PARAMETERS)
+            else:
+                raise ValueError(f"Unknown cryptographic scheme provided: '{scheme}'")
+        except Exception as e:
+            print(e)
+            raise e from None
 
         self._key_pair: KeyPair = None
         self._context = self.pyfhel.to_bytes_context()
@@ -56,14 +62,18 @@ class KeyHandler:
         return self._context
 
     def load_key_pair(self) -> Union[KeyPair, None]:
-        """Load an existing key-pair from disk based storage if exists."""
+        """Load an existing key-pair from disk based storage if exists"""
         pass
 
     def _generate_key_pair(self) -> KeyPair:
+        """Generate a public/secret/relinearization key for the given instrument"""
         self.pyfhel.keyGen()
+        self.pyfhel.relinKeyGen()
         self._key_pair = KeyPair(
+            context=self.pyfhel.to_bytes_context(),
             public=self.pyfhel.to_bytes_public_key(),
             secret=self.pyfhel.to_bytes_secret_key(),
+            relin=self.pyfhel.to_bytes_relin_key()
         )
         return self._key_pair
 

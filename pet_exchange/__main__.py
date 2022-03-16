@@ -45,6 +45,7 @@ SERVER_VARIABLES = {
         "plaintext",
         "cryptographic",
         "exchange_output",
+        "exchange_local_sort",
     ],
     "intermediate": [
         "intermediate_host",
@@ -53,6 +54,7 @@ SERVER_VARIABLES = {
         "exchange_port",
         "plaintext",
         "cryptographic",
+        "exchange_local_sort",
     ],
 }
 
@@ -72,7 +74,6 @@ def _determine_process_count(args: Namespace) -> int:
 
 
 def _start_server(parameters: Dict[str, Any]) -> NoReturn:
-    # TODO: Change the debug to be a parameter of this function or something instead
     name, kwargs = parameters
     asyncio.run(
         INIT_LOOKUP[name].serve(**kwargs),
@@ -209,6 +210,9 @@ async def start(args: Namespace):
                 del _servers[arg]["plaintext"]
                 del _servers[arg]["cryptographic"]
 
+                _servers[arg]["local_sort"] = _servers[arg]["exchange_local_sort"]
+                del _servers[arg]["exchange_local_sort"]
+
             pool.map(
                 _start_server,
                 ((server, config) for server, config in _servers.items()),
@@ -289,6 +293,12 @@ if __name__ == "__main__":
         type=str,
         nargs="+",
         default=None,
+    )
+    exchange.add_argument(
+        "-e:l",
+        "--exchange-local-sort",
+        help="Sort the orders locally on the exchange even for encrypted trading, this slows down trading severly due to the performance of the matching",
+        action="store_true",
     )
 
     intermediate = parser.add_argument_group("Intermediate")

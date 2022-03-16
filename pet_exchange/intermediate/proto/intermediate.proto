@@ -90,7 +90,10 @@ message KeyGenRequest {
 }
 
 message KeyGenReply {
-    bytes public = 1;
+    bytes context = 1;
+    bytes public = 2;
+    bytes secret = 3;  // TODO: Remove this, only used for debugging
+    bytes relin  = 4;
 }
 
 // EncryptOrder
@@ -120,14 +123,14 @@ message EncryptOrderBookReply {
 // Request to decrypt an order encrypted by the public key connected to a certain instrument
 message DecryptOrderRequest {
     CiphertextOrder order = 1;
-    optional bytes entity_bid = 2;
-    optional bytes entity_ask = 3;
+    bytes entity_bid = 2;
+    bytes entity_ask = 3;
 }
 
 message DecryptOrderReply {
     PlaintextOrder order = 1;
-    optional string entity_bid = 2;
-    optional string entity_ask = 3;
+    string entity_bid = 2;
+    string entity_ask = 3;
 }
 
 // DecryptOrderBook

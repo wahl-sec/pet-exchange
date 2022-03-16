@@ -14,6 +14,7 @@ import pet_exchange.proto.exchange_pb2_grpc as grpc_services
 
 from pet_exchange.exchange import OrderType, ExchangeOrderType
 from pet_exchange.engine.matcher import MatchingEngine
+from pet_exchange.common.utils import MAX_GRPC_MESSAGE_LENGTH
 from pet_exchange.common.crypto import BFV_PARAMETERS, CKKS_PARAMETERS
 from pet_exchange.exchange.client import ExchangeClient
 from pet_exchange.exchange.book import EncryptedOrderBook, OrderBook
@@ -46,7 +47,11 @@ class ExchangeServer(grpc_services.ExchangeProtoServicer):
         self._intermediate_channel = ExchangeClient(
             listen_addr=self.listen_addr,
             channel=grpc.aio.insecure_channel(
-                f"{self._intermediate_host}:{self._intermediate_port}"
+                f"{self._intermediate_host}:{self._intermediate_port}",
+                options=[
+                    ("grpc.max_send_message_length", MAX_GRPC_MESSAGE_LENGTH),
+                    ("grpc.max_receive_message_length", MAX_GRPC_MESSAGE_LENGTH),
+                ],
             ),
         )
 
@@ -80,8 +85,6 @@ class ExchangeServer(grpc_services.ExchangeProtoServicer):
         # TODO: This needs to change if we want to be able to key-switch
         if request.instrument not in self._matcher.pyfhel:
             _pyfhel = Pyfhel()
-            # _pyfhel.from_bytes_context(_key.context)
-            # _pyfhel.from_bytes_public_key(_key.public)
             if request.scheme == "bfv":
                 _pyfhel.contextGen(scheme="BFV", **BFV_PARAMETERS)
             elif request.scheme == "ckks":
@@ -91,9 +94,13 @@ class ExchangeServer(grpc_services.ExchangeProtoServicer):
                     f"Unknown cryptographic scheme provided: '{request.scheme}'"
                 )
 
+            _pyfhel.from_bytes_context(_key.context)
             _pyfhel.from_bytes_public_key(_key.public)
+            _pyfhel.from_bytes_secret_key(_key.secret)
+            _pyfhel.from_bytes_relin_key(_key.relin)
 
             self._matcher.keys[request.instrument] = _key.public
+            self._matcher.relin_keys[request.instrument] = _key.relin
             self._matcher.pyfhel[request.instrument] = _pyfhel
 
         return grpc_buffer.GetPublicKeyReply(public=_key.public)
@@ -169,8 +176,10 @@ class ExchangeServer(grpc_services.ExchangeProtoServicer):
         )
 
 
-def _start_matcher(matcher: MatchingEngine, encrypted: Optional[str]) -> NoReturn:
-    matcher.match(encrypted=encrypted)
+def _start_matcher(
+    matcher: MatchingEngine, encrypted: Optional[str], local_sort: bool
+) -> NoReturn:
+    matcher.match(encrypted=encrypted, local_sort=local_sort)
 
 
 async def serve(
@@ -181,8 +190,14 @@ async def serve(
     encrypted: Optional[str],
     exchange_output: str,
     instruments: List[str],
+    local_sort: bool,
 ) -> NoReturn:
-    server = grpc.aio.server()
+    server = grpc.aio.server(
+        options=[
+            ("grpc.max_send_message_length", MAX_GRPC_MESSAGE_LENGTH),
+            ("grpc.max_receive_message_length", MAX_GRPC_MESSAGE_LENGTH),
+        ]
+    )
     listen_addr = f"{exchange_host}:{exchange_port}"
 
     if exchange_output is not None:
@@ -196,7 +211,9 @@ async def serve(
     #       Alternatively we can make it so that the matcher creates another layer of threads to handle different books.
     with concurrent.futures.ThreadPoolExecutor(max_workers=5) as pool:
         logger.info(f"{matcher.__name__} ({listen_addr}): Waiting for orders ...")
-        pool.submit(_start_matcher, matcher=matcher, encrypted=encrypted)
+        pool.submit(
+            _start_matcher, matcher=matcher, encrypted=encrypted, local_sort=local_sort
+        )
 
         # Runs on the main child-process
         logger.info(

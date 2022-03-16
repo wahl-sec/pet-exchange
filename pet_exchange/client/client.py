@@ -17,6 +17,7 @@ import pet_exchange.proto.exchange_pb2 as grpc_buffer
 import pet_exchange.proto.exchange_pb2_grpc as grpc_services
 
 from pet_exchange.exchange import ExchangeOrderType
+from pet_exchange.common.utils import MAX_GRPC_MESSAGE_LENGTH
 from pet_exchange.common.crypto import BFV_PARAMETERS, CKKS_PARAMETERS, BFV, CKKS
 
 
@@ -63,7 +64,13 @@ async def client(
             _file.write(json.dumps({"CLIENTS": {}}))  # Clears the file
 
     # TODO: Fetch the public key and encrypt before sending to exchange, maybe we could implement a non-crypto exchange to benchmark against, just need to implement non-encrypted variants for all messages and check message type
-    async with grpc.aio.insecure_channel(f"{host}:{port}") as channel:
+    async with grpc.aio.insecure_channel(
+        f"{host}:{port}",
+        options=[
+            ("grpc.max_send_message_length", MAX_GRPC_MESSAGE_LENGTH),
+            ("grpc.max_receive_message_length", MAX_GRPC_MESSAGE_LENGTH),
+        ],
+    ) as channel:
         logger.info(f"Client '{client}': Waiting for exchange to wake up ...")
         await channel.channel_ready()
         stub = grpc_services.ExchangeProtoStub(channel)
@@ -129,6 +136,7 @@ async def client(
                         instrument=order["instrument"], scheme=encrypted
                     )
                 )
+
                 _pyfhel = Pyfhel()
                 if encrypted == "bfv":
                     _pyfhel.contextGen(scheme="BFV", **BFV_PARAMETERS)
@@ -195,7 +203,10 @@ async def client(
                 if _start is not None:
                     _start = time.time()
 
-            response = await _message(_request(order=_processed_order))
+            try:
+                response = await _message(_request(order=_processed_order))
+            except Exception as e:
+                print(e)
             logger.debug(
                 f"Client ({client}): Order for instrument: '{order['instrument']}' sent with identifier: '{response.uuid}'"
             )
