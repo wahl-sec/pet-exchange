@@ -5,7 +5,7 @@ import uuid
 from random import randint, uniform
 
 # Remove secret key from message and also look into compression for bytes
-MAX_GRPC_MESSAGE_LENGTH = 30000000
+MAX_GRPC_MESSAGE_LENGTH = 40000000
 
 
 def generate_identifier() -> str:

@@ -325,7 +325,7 @@ class MatchingEngine:
                 _, second = second
                 first, second = first.price, second.price
 
-                def inverse_estimation(x: PyCtxt, iterations: int, one: PyPtxt, two: PyPtxt) -> PyCtxt:
+                def inverse_estimation(a: PyCtxt, b: PyCtxt, one: PyPtxt, iterations: int) -> PyCtxt:
                     """Goldschmidt's divison algorithm is used to estimate the inverse of a given value
                     It follows the identity that:
                     (1 / x) = (1 / (1 - (1 - x))) = pSUM_i=0_inf(1 + (1 - x)^(2^i)) ~= pSUM_i=0_d(1 + (1 - x)^(2^i))
@@ -338,25 +338,7 @@ class MatchingEngine:
                     #     a_n+1 <- a_n * (1 + b_n+1)
                     # end for
                     # return a_d
-                    a = _scheme_engine._pyfhel.negate(x, in_new_ctxt=True)
-                    _scheme_engine.encrypt_add_plain_float(
-                        ciphertext=a,
-                        value=two,
-                        new_ctxt=False,
-                        to_bytes=False
-                    )
-                    _scheme_engine._pyfhel.relinearize(a)
-
-                    b = _scheme_engine._pyfhel.negate(x, in_new_ctxt=True)
-                    _scheme_engine.encrypt_add_plain_float(
-                        ciphertext=b,
-                        value=one,
-                        new_ctxt=False,
-                        to_bytes=False
-                    )
-                    _scheme_engine._pyfhel.relinearize(b)
-
-                    for _ in range(iterations):
+                    for index in range(iterations):
                         _scheme_engine.encrypt_square(
                             ciphertext=b,
                             new_ctxt=False,
@@ -365,18 +347,18 @@ class MatchingEngine:
                         _scheme_engine._pyfhel.relinearize(b)  # Seems to fuck up the value when resizing so it becomes very large
                         _scheme_engine._pyfhel.rescale_to_next(b)
                         b.round_scale()
-                        print("B", b.size(), b.scale, _scheme_engine.decrypt_float(b))
 
-                        _scheme_engine._pyfhel.mod_switch_to_next(one) # Match the rescale from 'b'
+                        _scheme_engine.encrypt_add_plain_float(
+                            ciphertext=b,
+                            value=one,
+                            new_ctxt=False,
+                            to_bytes=False
+                        )
+
                         _scheme_engine._pyfhel.mod_switch_to_next(a) # Match the rescale from 'b'
                         _scheme_engine.encrypt_mult_ciphertext_float(
                             ciphertext=a,
-                            value=_scheme_engine.encrypt_add_plain_float(
-                                ciphertext=b,
-                                value=one,
-                                new_ctxt=True,
-                                to_bytes=False
-                            ),
+                            value=b,
                             new_ctxt=False,
                             to_bytes=False
                         )
@@ -384,7 +366,32 @@ class MatchingEngine:
                         _scheme_engine._pyfhel.rescale_to_next(a)
                         a.round_scale()
 
+                        _scheme_engine._pyfhel.mod_switch_to_next(one)
+
                     return a
+
+                def scale_down(value: PyCtxt, l: float, half: PyPtxt) -> PyCtxt:
+                    """Scales down the value to the range [0, 1] using a given value l
+                    _a = 0.5 + (a / 2 ** l)
+                    """
+                    denom = _scheme_engine._pyfhel.encodeFrac(np.array([1 / (2 ** l)]))
+                    _scheme_engine.encrypt_mult_plain_float(
+                        ciphertext=value,
+                        value=denom,
+                        to_bytes=False,
+                        new_ctxt=False
+                    )
+                    _scheme_engine._pyfhel.rescale_to_next(value)
+                    value.round_scale()
+
+                    _scheme_engine.encrypt_add_plain_float(
+                        ciphertext=value,
+                        value=half,
+                        to_bytes=False,
+                        new_ctxt=False
+                    )
+
+                    return value
 
                 def compare(
                     first,
@@ -405,17 +412,27 @@ class MatchingEngine:
                     a = PyCtxt(serialized=first, pyfhel=_scheme_engine._pyfhel)
                     b = PyCtxt(serialized=second, pyfhel=_scheme_engine._pyfhel)
 
+                    L = 6
+                    half = _scheme_engine._pyfhel.encodeFrac(np.array([0.5]))
+                    _scheme_engine._pyfhel.mod_switch_to_next(half)
+                    a = scale_down(value=a, l=L, half=half)
+                    b = scale_down(value=b, l=L, half=half)
+
+                    one = _scheme_engine._pyfhel.encodeFrac(np.array([1.0]))
+                    _scheme_engine._pyfhel.mod_switch_to_next(one)
+                    two = _scheme_engine._pyfhel.encodeFrac(np.array([2.0]))
+                    _scheme_engine._pyfhel.mod_switch_to_next(two)
+
                     a_plus_b = _scheme_engine.encrypt_add_ciphertext_float(
                         ciphertext=a,
                         value=b,
                         new_ctxt=True,
                         to_bytes=False
                     )
-                    _scheme_engine._pyfhel.relinearize(a_plus_b)
 
                     a_div_two = _scheme_engine.encrypt_mult_plain_float(
                         ciphertext=a,
-                        value=0.5,
+                        value=half,
                         new_ctxt=True,
                         to_bytes=False
                     )
@@ -425,7 +442,7 @@ class MatchingEngine:
 
                     a_plus_b_div_two = _scheme_engine.encrypt_mult_plain_float(
                         ciphertext=a_plus_b,
-                        value=0.5,
+                        value=half,
                         new_ctxt=True,
                         to_bytes=False
                     )
@@ -433,18 +450,35 @@ class MatchingEngine:
                     _scheme_engine._pyfhel.rescale_to_next(a_plus_b_div_two)
                     a_plus_b_div_two.round_scale()
 
+                    _scheme_engine._pyfhel.mod_switch_to_next(two)
+                    a_plus_b_div_two_neg = _scheme_engine._pyfhel.negate(a_plus_b_div_two, in_new_ctxt=True)
+                    _a = _scheme_engine.encrypt_add_plain_float(
+                        ciphertext=a_plus_b_div_two_neg,
+                        value=two,
+                        to_bytes=False,
+                        new_ctxt=True
+                    )
 
-                    _scheme_engine._pyfhel.mod_switch_to_next(a_div_two)  # Mod switch twice to match 'b' parms
-                    _scheme_engine._pyfhel.mod_switch_to_next(a_div_two)
+                    _scheme_engine._pyfhel.mod_switch_to_next(one)
+                    _b = _scheme_engine.encrypt_add_plain_float(
+                        ciphertext=a_plus_b_div_two_neg,
+                        value=one,
+                        to_bytes=False,
+                        new_ctxt=True
+                    )
 
-                    two = _scheme_engine._pyfhel.encodeFrac(np.array([2.0]))
-                    _scheme_engine._pyfhel.mod_switch_to_next(two) # Match the parms from rescaling 'a_plus_b_div_two'
-                    one = _scheme_engine._pyfhel.encodeFrac(np.array([1.0]))
-                    _scheme_engine._pyfhel.mod_switch_to_next(one) # Match the parms from rescaling 'a_plus_b_div_two'
+                    _scheme_engine._pyfhel.mod_switch_to_next(one)
+
+                    inv = inverse_estimation(
+                        a=_a, b=_b, one=one,
+                        iterations=inverse_iterations_prim
+                    )
+                    for _ in range(inverse_iterations_prim + 1):
+                        _scheme_engine._pyfhel.mod_switch_to_next(a_div_two)  # Mod switch twice to match 'b' parms
 
                     a = _scheme_engine.encrypt_mult_ciphertext_float(
                         ciphertext=a_div_two,
-                        value=inverse_estimation(a_plus_b_div_two, iterations=inverse_iterations_prim, one=one, two=two),
+                        value=inv,
                         new_ctxt=True,
                         to_bytes=False
                     )
@@ -452,40 +486,58 @@ class MatchingEngine:
                     _scheme_engine._pyfhel.rescale_to_next(a)
                     a.round_scale()
 
+                    # one = _scheme_engine._pyfhel.encodeFrac(np.array([1.0]))
+                    _scheme_engine._pyfhel.mod_switch_to_next(one)
+
+                    a_neg = _scheme_engine._pyfhel.negate(a, in_new_ctxt=True)
+                    b = _scheme_engine.encrypt_add_plain_float(
+                        ciphertext=a_neg,
+                        value=one,
+                        new_ctxt=True,
+                        to_bytes=False
+                    )
+
+                    # TODO: Don't create new 'one'
                     one = _scheme_engine._pyfhel.encodeFrac(np.array([1.0]))
                     _scheme_engine._pyfhel.mod_switch_to_next(one)
                     _scheme_engine._pyfhel.mod_switch_to_next(one)
                     _scheme_engine._pyfhel.mod_switch_to_next(one)
                     _scheme_engine._pyfhel.mod_switch_to_next(one)
-                    a_inv = _scheme_engine._pyfhel.negate(a, in_new_ctxt=True)
-                    b = _scheme_engine.encrypt_add_plain_float(
-                        ciphertext=a_inv,
-                        value=one,
-                        new_ctxt=False,
-                        to_bytes=False
-                    )
-                    _scheme_engine._pyfhel.relinearize(b)
+                    _scheme_engine._pyfhel.mod_switch_to_next(one)
+                    _scheme_engine._pyfhel.mod_switch_to_next(two)
+                    _scheme_engine._pyfhel.mod_switch_to_next(two)
+                    _scheme_engine._pyfhel.mod_switch_to_next(two)
 
                     for _ in range(iterations):
-                        a_pow = _scheme_engine.encrypt_pow_plain_int(
-                            ciphertext=a,
-                            value=approximation_value,
-                            new_ctxt=True,
-                            to_bytes=False
-                        )
-                        _scheme_engine._pyfhel.relinearize(a_pow) # This would be moved to inside the pow loop together with rescale
-                        _scheme_engine._pyfhel.rescale_to_next(a_pow)
-                        a_pow.round_scale()
+                        a_pow = PyCtxt(copy_ctxt=a)
+                        for _ in range(approximation_value - 1):
+                            _scheme_engine.encrypt_mult_ciphertext_float(
+                                ciphertext=a_pow,
+                                value=a,
+                                to_bytes=False,
+                                new_ctxt=False
+                            )
+                            _scheme_engine._pyfhel.relinearize(a_pow)
+                            _scheme_engine._pyfhel.rescale_to_next(a_pow)
+                            a_pow.round_scale()
 
-                        b_pow = _scheme_engine.encrypt_pow_plain_int(
-                            ciphertext=b,
-                            value=approximation_value,
-                            new_ctxt=True,
-                            to_bytes=False
-                        )
-                        _scheme_engine._pyfhel.relinearize(b_pow)
-                        _scheme_engine._pyfhel.rescale_to_next(b_pow)
-                        b_pow.round_scale()
+                            _scheme_engine._pyfhel.mod_switch_to_next(a)
+                            _scheme_engine._pyfhel.mod_switch_to_next(two)
+
+                        b_pow = PyCtxt(copy_ctxt=b)
+                        for i in range(approximation_value - 1):
+                            _scheme_engine.encrypt_mult_ciphertext_float(
+                                ciphertext=b_pow,
+                                value=b,
+                                to_bytes=False,
+                                new_ctxt=False
+                            )
+                            _scheme_engine._pyfhel.relinearize(b_pow)
+                            _scheme_engine._pyfhel.rescale_to_next(b_pow)
+                            b_pow.round_scale()
+
+                            _scheme_engine._pyfhel.mod_switch_to_next(b)
+                            _scheme_engine._pyfhel.mod_switch_to_next(one)
 
                         a_pow_plus_b_pow = _scheme_engine.encrypt_add_ciphertext_float(
                             ciphertext=a_pow,
@@ -494,22 +546,29 @@ class MatchingEngine:
                             to_bytes=False
                         )
 
-                        two = _scheme_engine._pyfhel.encodeFrac(np.array([2.0]))
-                        _scheme_engine._pyfhel.mod_switch_to_next(two) # Match the parms from rescaling 'a_pow_plus_b_pow'
-                        _scheme_engine._pyfhel.mod_switch_to_next(two) # Match the parms from rescaling 'a_pow_plus_b_pow'
-                        _scheme_engine._pyfhel.mod_switch_to_next(two) # Match the parms from rescaling 'a_pow_plus_b_pow'
-                        _scheme_engine._pyfhel.mod_switch_to_next(two) # Match the parms from rescaling 'a_pow_plus_b_pow'
-                        _scheme_engine._pyfhel.mod_switch_to_next(two) # Match the parms from rescaling 'a_pow_plus_b_pow'
-                        one = _scheme_engine._pyfhel.encodeFrac(np.array([1.0]))
-                        _scheme_engine._pyfhel.mod_switch_to_next(one) # Match the parms from rescaling 'a_pow_plus_b_pow'
-                        _scheme_engine._pyfhel.mod_switch_to_next(one) # Match the parms from rescaling 'a_pow_plus_b_pow'
-                        _scheme_engine._pyfhel.mod_switch_to_next(one) # Match the parms from rescaling 'a_pow_plus_b_pow'
-                        _scheme_engine._pyfhel.mod_switch_to_next(one) # Match the parms from rescaling 'a_pow_plus_b_pow'
-                        _scheme_engine._pyfhel.mod_switch_to_next(one) # Match the parms from rescaling 'a_pow_plus_b_pow'
-                        inv = inverse_estimation(a_pow_plus_b_pow, iterations=inverse_iterations, one=one, two=two)
+                        _a = _scheme_engine._pyfhel.negate(a_pow_plus_b_pow, in_new_ctxt=True)
+                        _scheme_engine.encrypt_add_plain_float(
+                            ciphertext=_a,
+                            value=two,
+                            to_bytes=False,
+                            new_ctxt=False
+                        )
+
+                        _b = _scheme_engine._pyfhel.negate(a_pow_plus_b_pow, in_new_ctxt=True)
+                        _scheme_engine.encrypt_add_plain_float(
+                            ciphertext=_b,
+                            value=one,
+                            to_bytes=False,
+                            new_ctxt=False
+                        )
+
+                        _scheme_engine._pyfhel.mod_switch_to_next(one)
+
+                        inv = inverse_estimation(a=_a, b=_b, one=one, iterations=inverse_iterations) # TODO: This iteration needs to be higher does not produce valid result for just one iteration
 
                         _scheme_engine._pyfhel.mod_switch_to_next(a_pow) # Match the parms from rescaling 'inv'
                         _scheme_engine._pyfhel.mod_switch_to_next(a_pow) # Match the parms from rescaling 'inv'
+
                         a = _scheme_engine.encrypt_mult_ciphertext_float(
                             ciphertext=a_pow,
                             value=inv,
@@ -520,25 +579,26 @@ class MatchingEngine:
                         _scheme_engine._pyfhel.rescale_to_next(a)
                         a.round_scale()
 
-                        one = _scheme_engine._pyfhel.encodeFrac(np.array([1.0]))
-                        _scheme_engine._pyfhel.mod_switch_to_next(one) # Match the parms from rescaling 'a_inv'
-                        _scheme_engine._pyfhel.mod_switch_to_next(one) # Match the parms from rescaling 'a_inv'
-                        _scheme_engine._pyfhel.mod_switch_to_next(one) # Match the parms from rescaling 'a_inv'
-                        _scheme_engine._pyfhel.mod_switch_to_next(one) # Match the parms from rescaling 'a_inv'
-                        _scheme_engine._pyfhel.mod_switch_to_next(one) # Match the parms from rescaling 'a_inv'
-                        _scheme_engine._pyfhel.mod_switch_to_next(one) # Match the parms from rescaling 'a_inv'
-                        _scheme_engine._pyfhel.mod_switch_to_next(one) # Match the parms from rescaling 'a_inv'
-                        _scheme_engine._pyfhel.mod_switch_to_next(one) # Match the parms from rescaling 'a_inv'
+                        _scheme_engine._pyfhel.mod_switch_to_next(one) # Match the parms from rescaling 'a_neg'
 
-                        a_inv = _scheme_engine._pyfhel.negate(a)
+                        a_neg = _scheme_engine._pyfhel.negate(a, in_new_ctxt=True)
                         b = _scheme_engine.encrypt_add_plain_float(
-                            ciphertext=a_inv,
+                            ciphertext=a_neg,
                             value=one,
                             new_ctxt=True,
                             to_bytes=False
                         )
 
-                    print("F", a.size(), a.scale, a.scale_bits, _scheme_engine.decrypt_float(a), "FIRST", _scheme_engine.decrypt_float(first), "SECOND", _scheme_engine.decrypt_float(second))
+                    res = _scheme_engine.decrypt_float(a)
+                    d_first = _scheme_engine.decrypt_float(first)
+                    d_second = _scheme_engine.decrypt_float(second)
+                    exp = "<=" if d_first <= d_second else ">="
+                    if res > 0.5:
+                        level = 30 if exp == ">=" else 50
+                        logger.log(level=level, msg=f"{d_first} >= {d_second}, {(d_first, d_second)} ({res}), expected: ({exp})")
+                    else:
+                        level = 30 if exp == "<=" else 50
+                        logger.log(level=level, msg=f"{d_first} <= {d_second}, {(d_first, d_second)} ({res}), expected: ({exp})")
                     return 1 if a == _scheme_engine.encrypt_float(1.0) else -1
 
                 return compare(
@@ -547,7 +607,7 @@ class MatchingEngine:
                     inverse_iterations=1,
                     inverse_iterations_prim=1,
                     iterations=1,
-                    approximation_value=2 ** 2,
+                    approximation_value=2 ** 1,
                 )
 
             if local_sort:
