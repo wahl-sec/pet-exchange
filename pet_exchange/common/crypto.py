@@ -15,13 +15,13 @@ BFV_PARAMETERS = {"p": 65537, "n": 4096, "sec": 128}
 # scale - scaling factor - defines encoding precision for the binary representation of coefficients, bigger is better (precision), bigger is worse (performance?)`
 CKKS_PARAMETERS = {
     "n": 2 ** 14,
-    # "qs": [42, 36, 36, 36, 36, 36, 36, 36, 36, 36, 36, 36],
-    "qs": [48] + [30] * 13,
-    "scale": 2 ** 30,
+    "qs": [42] + [32] * 11 + [42],
+    # "qs": [31] + [25] * 15 + [31],
+    "scale": 2 ** 32,
 }
 
 # Max qs for 2 ** 14 is 438
-# Need atleast 12 primes if approx is 2 ** 1
+# Need atleast 11 primes if approx is 2 ** 1
 
 
 class BFV:

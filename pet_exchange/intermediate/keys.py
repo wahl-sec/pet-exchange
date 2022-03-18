@@ -37,7 +37,7 @@ class KeyHandler:
             else:
                 raise ValueError(f"Unknown cryptographic scheme provided: '{scheme}'")
         except Exception as e:
-            print(e)
+            print("Failed to generate context", e)
             raise e from None
 
         self._key_pair: KeyPair = None

@@ -338,35 +338,60 @@ class MatchingEngine:
                     #     a_n+1 <- a_n * (1 + b_n+1)
                     # end for
                     # return a_d
+
+                    # Depth
+                    # a -> 0
+                    # b -> 0
+                    # one -> 0
+
                     for index in range(iterations):
                         _scheme_engine.encrypt_square(
                             ciphertext=b,
                             new_ctxt=False,
                             to_bytes=False
                         )
-                        _scheme_engine._pyfhel.relinearize(b)  # Seems to fuck up the value when resizing so it becomes very large
+                        _scheme_engine._pyfhel.relinearize(b)
                         _scheme_engine._pyfhel.rescale_to_next(b)
                         b.round_scale()
 
-                        _scheme_engine.encrypt_add_plain_float(
+                        # Depth
+                        # a -> 0
+                        # b -> 1
+                        # one -> 0
+                        b_plus_one = _scheme_engine.encrypt_add_plain_float(
                             ciphertext=b,
                             value=one,
-                            new_ctxt=False,
+                            new_ctxt=True,
                             to_bytes=False
                         )
 
-                        _scheme_engine._pyfhel.mod_switch_to_next(a) # Match the rescale from 'b'
                         _scheme_engine.encrypt_mult_ciphertext_float(
                             ciphertext=a,
-                            value=b,
+                            value=b_plus_one,
                             new_ctxt=False,
                             to_bytes=False
                         )
-                        _scheme_engine._pyfhel.relinearize(a)  # Too large when 'b' is not also relinearized
+                        _scheme_engine._pyfhel.relinearize(a)
                         _scheme_engine._pyfhel.rescale_to_next(a)
                         a.round_scale()
 
-                        _scheme_engine._pyfhel.mod_switch_to_next(one)
+                        # Depth
+                        # a -> 1
+                        # b -> 1
+                        # one -> 0
+
+                        if iterations > 1 and index < (iterations - 1):
+                            _scheme_engine._pyfhel.mod_switch_to_next(one)
+
+                        # Depth
+                        # a -> 1
+                        # b -> 1
+                        # one -> (i - 1)
+
+                    # Depth
+                    # a -> i
+                    # b -> i
+                    # one -> (i - 1)
 
                     return a
 
@@ -412,16 +437,32 @@ class MatchingEngine:
                     a = PyCtxt(serialized=first, pyfhel=_scheme_engine._pyfhel)
                     b = PyCtxt(serialized=second, pyfhel=_scheme_engine._pyfhel)
 
+                    # Depth
+                    # a -> 1
+                    # b -> 1
+
                     L = 6
                     half = _scheme_engine._pyfhel.encodeFrac(np.array([0.5]))
                     _scheme_engine._pyfhel.mod_switch_to_next(half)
                     a = scale_down(value=a, l=L, half=half)
                     b = scale_down(value=b, l=L, half=half)
 
+                    # Depth
+                    # a -> 2
+                    # b -> 2
+                    # half -> 2
+
                     one = _scheme_engine._pyfhel.encodeFrac(np.array([1.0]))
                     _scheme_engine._pyfhel.mod_switch_to_next(one)
                     two = _scheme_engine._pyfhel.encodeFrac(np.array([2.0]))
                     _scheme_engine._pyfhel.mod_switch_to_next(two)
+
+                    # Depth
+                    # a -> 2
+                    # b -> 2
+                    # half -> 2
+                    # one -> 2
+                    # two -> 2
 
                     a_plus_b = _scheme_engine.encrypt_add_ciphertext_float(
                         ciphertext=a,
@@ -440,6 +481,15 @@ class MatchingEngine:
                     _scheme_engine._pyfhel.rescale_to_next(a_div_two)
                     a_div_two.round_scale()
 
+                    # Depth
+                    # a -> 2
+                    # b -> 2
+                    # half -> 2
+                    # one -> 2
+                    # two -> 2
+                    # a_plus_b -> 2
+                    # a_div_two -> 3
+
                     a_plus_b_div_two = _scheme_engine.encrypt_mult_plain_float(
                         ciphertext=a_plus_b,
                         value=half,
@@ -450,7 +500,19 @@ class MatchingEngine:
                     _scheme_engine._pyfhel.rescale_to_next(a_plus_b_div_two)
                     a_plus_b_div_two.round_scale()
 
+                    _scheme_engine._pyfhel.mod_switch_to_next(one)
                     _scheme_engine._pyfhel.mod_switch_to_next(two)
+
+                    # Depth
+                    # a -> 2
+                    # b -> 2
+                    # half -> 2
+                    # one -> 3
+                    # two -> 3
+                    # a_plus_b -> 2
+                    # a_div_two -> 3
+                    # a_plus_b_div_two -> 3
+
                     a_plus_b_div_two_neg = _scheme_engine._pyfhel.negate(a_plus_b_div_two, in_new_ctxt=True)
                     _a = _scheme_engine.encrypt_add_plain_float(
                         ciphertext=a_plus_b_div_two_neg,
@@ -459,7 +521,6 @@ class MatchingEngine:
                         new_ctxt=True
                     )
 
-                    _scheme_engine._pyfhel.mod_switch_to_next(one)
                     _b = _scheme_engine.encrypt_add_plain_float(
                         ciphertext=a_plus_b_div_two_neg,
                         value=one,
@@ -467,14 +528,69 @@ class MatchingEngine:
                         new_ctxt=True
                     )
 
+                    # Depth
+                    # a -> 2
+                    # _a -> 3
+                    # b -> 2
+                    # _b -> 3
+                    # half -> 2
+                    # one -> 3
+                    # two -> 3
+                    # a_plus_b -> 2
+                    # a_div_two -> 3
+                    # a_plus_b_div_two -> 3
+                    # a_plus_b_div_two_neg -> 3
+
                     _scheme_engine._pyfhel.mod_switch_to_next(one)
+                    # for _ in range(inverse_iterations_prim):         B
+                    _scheme_engine._pyfhel.mod_switch_to_next(_a)
+
+                    # Depth
+                    # a -> 2
+                    # _a -> 3 + i'
+                    # b -> 2
+                    # _b -> 3
+                    # half -> 2
+                    # one -> 4
+                    # two -> 3
+                    # a_plus_b -> 2
+                    # a_div_two -> 3
+                    # a_plus_b_div_two -> 3
+                    # a_plus_b_div_two_neg -> 3
 
                     inv = inverse_estimation(
                         a=_a, b=_b, one=one,
                         iterations=inverse_iterations_prim
                     )
+
+                    # Depth
+                    # a -> 2
+                    # _a -> 3 + 2 * i'
+                    # b -> 2
+                    # _b -> 3 + i'
+                    # half -> 2
+                    # one -> 4 + (i' - 1)
+                    # two -> 3
+                    # a_plus_b -> 2
+                    # a_div_two -> 3
+                    # a_plus_b_div_two -> 3
+                    # a_plus_b_div_two_neg -> 3
+
                     for _ in range(inverse_iterations_prim + 1):
                         _scheme_engine._pyfhel.mod_switch_to_next(a_div_two)  # Mod switch twice to match 'b' parms
+
+                    # Depth
+                    # a -> 2
+                    # _a -> 3 + 2 * i'
+                    # b -> 2
+                    # _b -> 3 + i'
+                    # half -> 2
+                    # one -> 4 + (i' - 1)
+                    # two -> 3
+                    # a_plus_b -> 2
+                    # a_div_two -> 4 + i'
+                    # a_plus_b_div_two -> 3
+                    # a_plus_b_div_two_neg -> 3
 
                     a = _scheme_engine.encrypt_mult_ciphertext_float(
                         ciphertext=a_div_two,
@@ -486,9 +602,36 @@ class MatchingEngine:
                     _scheme_engine._pyfhel.rescale_to_next(a)
                     a.round_scale()
 
+                    # Depth
+                    # a -> 5 + i'
+                    # _a -> 3 + 2 * i'
+                    # b -> 2
+                    # _b -> 3 + i'
+                    # half -> 2
+                    # one -> 4 + (i' - 1)
+                    # two -> 3
+                    # a_plus_b -> 2
+                    # a_div_two -> 4 + i'
+                    # a_plus_b_div_two -> 3
+                    # a_plus_b_div_two_neg -> 3
+
                     # one = _scheme_engine._pyfhel.encodeFrac(np.array([1.0]))
                     _scheme_engine._pyfhel.mod_switch_to_next(one)
 
+                    # Depth
+                    # a -> 5 + i'
+                    # _a -> 3 + 2 * i'
+                    # b -> 2
+                    # _b -> 3 + i'
+                    # half -> 2
+                    # one -> 4 + i'
+                    # two -> 3
+                    # a_plus_b -> 2
+                    # a_div_two -> 4 + i'
+                    # a_plus_b_div_two -> 3
+                    # a_plus_b_div_two_neg -> 3
+
+                    _scheme_engine._pyfhel.mod_switch_to_next(one)
                     a_neg = _scheme_engine._pyfhel.negate(a, in_new_ctxt=True)
                     b = _scheme_engine.encrypt_add_plain_float(
                         ciphertext=a_neg,
@@ -497,16 +640,36 @@ class MatchingEngine:
                         to_bytes=False
                     )
 
-                    # TODO: Don't create new 'one'
-                    one = _scheme_engine._pyfhel.encodeFrac(np.array([1.0]))
-                    _scheme_engine._pyfhel.mod_switch_to_next(one)
-                    _scheme_engine._pyfhel.mod_switch_to_next(one)
-                    _scheme_engine._pyfhel.mod_switch_to_next(one)
-                    _scheme_engine._pyfhel.mod_switch_to_next(one)
-                    _scheme_engine._pyfhel.mod_switch_to_next(one)
-                    _scheme_engine._pyfhel.mod_switch_to_next(two)
-                    _scheme_engine._pyfhel.mod_switch_to_next(two)
-                    _scheme_engine._pyfhel.mod_switch_to_next(two)
+                    # Depth
+                    # a -> 5 + i'
+                    # _a -> 3 + 2 * i'
+                    # b -> 5 + i'
+                    # _b -> 3 + i'
+                    # half -> 2
+                    # one -> 5 + i'
+                    # two -> 3
+                    # a_plus_b -> 2
+                    # a_div_two -> 4 + i'
+                    # a_plus_b_div_two -> 3
+                    # a_plus_b_div_two_neg -> 3
+                    # a_neg -> 5 + i'
+
+                    for _ in range(3 + inverse_iterations_prim - 1):
+                        _scheme_engine._pyfhel.mod_switch_to_next(two)
+
+                    # Depth
+                    # a -> 5 + i'
+                    # _a -> 3 + 2 * i'
+                    # b -> 5 + i'
+                    # _b -> 3 + i'
+                    # half -> 2
+                    # one -> 5 + i'
+                    # two -> 5 + i'
+                    # a_plus_b -> 2
+                    # a_div_two -> 4 + i'
+                    # a_plus_b_div_two -> 3
+                    # a_plus_b_div_two_neg -> 3
+                    # a_neg -> 5 + i'
 
                     for _ in range(iterations):
                         a_pow = PyCtxt(copy_ctxt=a)
@@ -521,8 +684,21 @@ class MatchingEngine:
                             _scheme_engine._pyfhel.rescale_to_next(a_pow)
                             a_pow.round_scale()
 
+                            # Depth
+                            # a_pow -> a - 1
+
                             _scheme_engine._pyfhel.mod_switch_to_next(a)
                             _scheme_engine._pyfhel.mod_switch_to_next(two)
+
+                            # Depth
+                            # a -> a - 1
+                            # a_pow -> a - 1
+                            # two -> a - 1
+
+                        # Depth
+                        # a_pow -> a - 1
+                        # a -> a - 1
+                        # two -> a - 1
 
                         b_pow = PyCtxt(copy_ctxt=b)
                         for i in range(approximation_value - 1):
@@ -536,8 +712,24 @@ class MatchingEngine:
                             _scheme_engine._pyfhel.rescale_to_next(b_pow)
                             b_pow.round_scale()
 
+                            # Depth
+                            # b_pow -> a - 1
+
                             _scheme_engine._pyfhel.mod_switch_to_next(b)
                             _scheme_engine._pyfhel.mod_switch_to_next(one)
+
+                            # Depth
+                            # b -> a - 1
+                            # b_pow -> a - 1
+                            # one -> a - 1
+
+                        # Depth
+                        # a -> a - 1
+                        # b -> a - 1
+                        # a_pow -> a - 1
+                        # b_pow -> a - 1
+                        # one -> a - 1
+                        # two -> a - 1
 
                         a_pow_plus_b_pow = _scheme_engine.encrypt_add_ciphertext_float(
                             ciphertext=a_pow,
@@ -546,28 +738,132 @@ class MatchingEngine:
                             to_bytes=False
                         )
 
-                        _a = _scheme_engine._pyfhel.negate(a_pow_plus_b_pow, in_new_ctxt=True)
-                        _scheme_engine.encrypt_add_plain_float(
-                            ciphertext=_a,
+                        # Depth
+                        # a -> a - 1
+                        # a_pow -> a - 1
+                        # b_pow -> a - 1
+                        # one -> a - 1
+                        # two -> a - 1
+                        # a_pow_plus_b_pow -> a - 1
+
+                        a_pow_plus_b_pow_neg = _scheme_engine._pyfhel.negate(a_pow_plus_b_pow, in_new_ctxt=True)
+                        a_a = _scheme_engine.encrypt_add_plain_float(
+                            ciphertext=a_pow_plus_b_pow_neg,
                             value=two,
                             to_bytes=False,
-                            new_ctxt=False
+                            new_ctxt=True
                         )
 
-                        _b = _scheme_engine._pyfhel.negate(a_pow_plus_b_pow, in_new_ctxt=True)
-                        _scheme_engine.encrypt_add_plain_float(
-                            ciphertext=_b,
+                        b_b = _scheme_engine.encrypt_add_plain_float(
+                            ciphertext=a_pow_plus_b_pow_neg,
                             value=one,
                             to_bytes=False,
-                            new_ctxt=False
+                            new_ctxt=True
                         )
+
+                        # Depth
+                        # a -> a - 1
+                        # a_a -> a - 1
+                        # b -> a - 1
+                        # b_b -> a - 1
+                        # a_pow -> a - 1
+                        # b_pow -> a - 1
+                        # one -> a - 1
+                        # two -> a - 1
+                        # a_pow_plus_b_pow -> a - 1
+                        # a_pow_plus_b_pow_neg -> a - 1
 
                         _scheme_engine._pyfhel.mod_switch_to_next(one)
 
-                        inv = inverse_estimation(a=_a, b=_b, one=one, iterations=inverse_iterations) # TODO: This iteration needs to be higher does not produce valid result for just one iteration
+                        # Depth
+                        # a -> a - 1
+                        # a_a -> a - 1
+                        # b -> a - 1
+                        # b_b -> a - 1
+                        # a_pow -> a - 1
+                        # b_pow -> a - 1
+                        # one -> a
+                        # two -> a - 1
+                        # a_pow_plus_b_pow -> a - 1
+                        # a_pow_plus_b_pow_neg -> a - 1
 
-                        _scheme_engine._pyfhel.mod_switch_to_next(a_pow) # Match the parms from rescaling 'inv'
-                        _scheme_engine._pyfhel.mod_switch_to_next(a_pow) # Match the parms from rescaling 'inv'
+                        for _ in range(inverse_iterations):
+                            _scheme_engine._pyfhel.mod_switch_to_next(a_a)
+
+                        # Depth
+                        # a -> a - 1
+                        # a_a -> a - 1 + i
+                        # b -> a - 1
+                        # b_b -> a - 1
+                        # a_pow -> a - 1
+                        # b_pow -> a - 1
+                        # one -> a
+                        # two -> a - 1
+                        # a_pow_plus_b_pow -> a - 1
+                        # a_pow_plus_b_pow_neg -> a - 1
+
+                        for _ in range(inverse_iterations - 1):
+                            _scheme_engine._pyfhel.mod_switch_to_next(b_b)
+                            _scheme_engine._pyfhel.mod_switch_to_next(one)
+
+                        # Depth
+                        # a -> a - 1
+                        # a_a -> a - 1 + i
+                        # b -> a - 1
+                        # b_b -> a - 2 + i
+                        # a_pow -> a - 1
+                        # b_pow -> a - 1
+                        # one -> a - 1 + i
+                        # two -> a - 1
+                        # a_pow_plus_b_pow -> a - 1
+                        # a_pow_plus_b_pow_neg -> a - 1
+
+                        inv = inverse_estimation(a=a_a, b=b_b, one=one, iterations=inverse_iterations)
+
+                        # Depth
+                        # a -> a - 1
+                        # a_a -> a - 1 + 2 * i
+                        # b -> a - 1
+                        # b_b -> a - 2 + 2 * i
+                        # a_pow -> a - 1
+                        # b_pow -> a - 1
+                        # one -> a - 2 + 2 * i
+                        # two -> a - 1
+                        # inv -> a - 1 + 2 * i
+                        # a_pow_plus_b_pow -> a - 1
+                        # a_pow_plus_b_pow_neg -> a - 1
+
+                        # for _ in range(inverse_iterations + 1):
+                        #    _scheme_engine._pyfhel.mod_switch_to_next(one)
+
+                        # Depth
+                        # a -> a - 1
+                        # a_a -> a - 1 + 2 * i
+                        # b -> a - 1
+                        # b_b -> a - 2 + 2 * i
+                        # a_pow -> a - 1
+                        # b_pow -> a - 1
+                        # one -> a - 2 + 2 * i
+                        # two -> a - 1
+                        # inv -> a - 1 + 2 * i
+                        # a_pow_plus_b_pow -> a - 1
+                        # a_pow_plus_b_pow_neg -> a - 1
+
+                        for _ in range(2 * inverse_iterations):
+                            _scheme_engine._pyfhel.mod_switch_to_next(a_pow)
+
+                        # Depth
+                        # a -> a - 1
+                        # a_a -> a - 1 + 2 * i
+                        # b -> a - 1
+                        # b_b -> a - 2 + 2 * i
+                        # a_pow -> a - i + 2 * i
+                        # b_pow -> a - 1
+                        # one -> a - 2 + 2 * i
+                        # two -> a - 1
+                        # inv -> a - 1 + 2 * i
+                        # a_pow_plus_b_pow -> a - 1
+                        # a_pow_plus_b_pow_neg -> a - 1
 
                         a = _scheme_engine.encrypt_mult_ciphertext_float(
                             ciphertext=a_pow,
@@ -579,15 +875,84 @@ class MatchingEngine:
                         _scheme_engine._pyfhel.rescale_to_next(a)
                         a.round_scale()
 
-                        _scheme_engine._pyfhel.mod_switch_to_next(one) # Match the parms from rescaling 'a_neg'
+                        # Depth
+                        # a -> a + 2 * i
+                        # a_a -> a - 1 + 2 * i
+                        # b -> a - 1
+                        # b_b -> a - 2 + 2 * i
+                        # a_pow -> a - 1 + 2 * i
+                        # b_pow -> a - 1
+                        # one -> a - 2 + 2 * i
+                        # two -> a - 1
+                        # inv -> a - 1 + 2 * i
+                        # a_pow_plus_b_pow -> a - 1
+                        # a_pow_plus_b_pow_neg -> a - 1
 
-                        a_neg = _scheme_engine._pyfhel.negate(a, in_new_ctxt=True)
+                        for _ in range(2):
+                            _scheme_engine._pyfhel.mod_switch_to_next(one)
+
+                        # Depth
+                        # a -> a + 2 * i
+                        # a_a -> a - 1 + 2 * i
+                        # b -> a + 1 + i
+                        # b_b -> a - 2 + 2 * i
+                        # a_pow -> a - 1 + 2 * i
+                        # b_pow -> a - 1
+                        # one -> a + 2 * i
+                        # two -> a - 1
+                        # inv -> a - 1 + 2 * i
+                        # a_pow_plus_b_pow -> a - 1
+                        # a_pow_plus_b_pow_neg -> a - 1
+
+                        a_a_neg = _scheme_engine._pyfhel.negate(a, in_new_ctxt=True)
                         b = _scheme_engine.encrypt_add_plain_float(
-                            ciphertext=a_neg,
+                            ciphertext=a_a_neg,
                             value=one,
                             new_ctxt=True,
                             to_bytes=False
                         )
+
+                        for _ in range(3):
+                            _scheme_engine._pyfhel.mod_switch_to_next(two)
+
+                        # Depth
+                        # a -> a + 2 * i
+                        # a_a -> a - 1 + 2 * i
+                        # b -> a + 1 + i
+                        # b_b -> a - 2 + 2 * i
+                        # a_pow -> a - 1 + 2 * i
+                        # b_pow -> a - 1
+                        # one -> a + 2 * i
+                        # two -> a + 1
+                        # inv -> a - 1 + 2 * i
+                        # a_pow_plus_b_pow -> a - 1
+                        # a_pow_plus_b_pow_neg -> a - 1
+                        # a_a_neg -> a + 2
+
+
+                    # Depth
+                    # a -> 5 + i' + I * (a + 2 * i)
+                    # _a -> 3 + 2 * i'
+                    # a_a -> I * (a - 1 + 2 * i)
+                    # b -> 5 + i' + I * (a + 1 + i)
+                    # _b -> 3 + i'
+                    # b_b -> I * (a - 2 + 2 * i)
+                    # half -> 2
+                    # one -> 5 + i' + I * (a + 2 * i)
+                    # two -> 5 + i' + I * (a + 1)
+                    # a_plus_b -> 2
+                    # a_div_two -> 4 + i'
+                    # a_plus_b_div_two -> 3
+                    # a_plus_b_div_two_neg -> 3
+                    # a_neg -> 5 + i'
+                    # a_a_neg -> a + 2
+
+                    # 5 + 3 + (2 + 2 * 3) = 16
+                    # Our minimal depth is 10 because of the depth of 'a' and 'one'
+                    # That means we must have at least 10 + 1 primes, 10 for multiplicate depth and 1 for decryption
+                    #
+                    # If we want to increase the iterations of say i' to 2 we would get
+                    # a multiplicate depth of 5 + 2 + 1 * (2 + 2) = 11 for 'a' meaning we would need 12 primes in total
 
                     res = _scheme_engine.decrypt_float(a)
                     d_first = _scheme_engine.decrypt_float(first)
@@ -604,7 +969,7 @@ class MatchingEngine:
                 return compare(
                     first,
                     second,
-                    inverse_iterations=1,
+                    inverse_iterations=2,
                     inverse_iterations_prim=1,
                     iterations=1,
                     approximation_value=2 ** 1,

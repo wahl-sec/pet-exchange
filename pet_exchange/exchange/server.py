@@ -59,7 +59,11 @@ class ExchangeServer(grpc_services.ExchangeProtoServicer):
         self._matcher._intermediate_channel = ExchangeClient(
             listen_addr=self.listen_addr,
             channel=grpc.insecure_channel(
-                f"{self._intermediate_host}:{self._intermediate_port}"
+                f"{self._intermediate_host}:{self._intermediate_port}",
+                options=[
+                    ("grpc.max_send_message_length", MAX_GRPC_MESSAGE_LENGTH),
+                    ("grpc.max_receive_message_length", MAX_GRPC_MESSAGE_LENGTH),
+                ],
             ),
         )
         super(grpc_services.ExchangeProtoServicer).__init__()
