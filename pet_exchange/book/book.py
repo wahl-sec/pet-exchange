@@ -35,6 +35,7 @@ class OrderBook:
             ],
         ] = {}
         self._book_performed: Dict[str, Dict[str, Any]] = {}
+        self._book_metrics: Dict[str, Dict[str, Any]] = {}
         self._exchange_order_type = exchange_order_type
 
         self.__name__ = f"Order-Book-{instrument}-{exchange_order_type}"
@@ -133,6 +134,16 @@ class OrderBook:
         #     )
 
         return _identifier
+
+    def add_metrics(self, category: str, value: Dict[str, Any], section: str=None):
+        """Add metrics to the book, this is purely used for evaluation and does not provide any functionality to the trading."""
+        if category not in self._book_metrics:
+            self._book_metrics[category] = {}
+
+        if section is not None and section not in self._book_metrics[category]:
+            self._book_metrics[category][section] = []
+
+        self._book_metrics[category][section].append(value)
 
     def add_performed(
         self,

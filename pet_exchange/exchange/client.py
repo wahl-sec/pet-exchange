@@ -35,18 +35,18 @@ class ExchangeClient:
 
     # @route_logger(grpc_buffer_intermediate.GetMinimumValueReply)
     def GetMinimumValue(
-        self, first, second, instrument, encoding
+        self, challenges, instrument, encoding
     ) -> grpc_buffer_intermediate.GetMinimumValueReply:
         if encoding == "float":
             return self.stub.GetMinimumValueFloat(
                 grpc_buffer_intermediate.GetMinimumValueRequest(
-                    first=first, second=second, instrument=instrument
+                    challenges=challenges, instrument=instrument
                 )
             )
         else:
             return self.stub.GetMinimumValueInt(
                 grpc_buffer_intermediate.GetMinimumValueRequest(
-                    first=first, second=second, instrument=instrument
+                    challenges=challenges, instrument=instrument
                 )
             )
 

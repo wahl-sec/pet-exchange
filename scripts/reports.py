@@ -138,6 +138,15 @@ METRICS_STRUCTURE = {
     "MIN_TIME_TO_COMPLETION": None,
     "MIN_TIME_TO_COMPLETION_BID": None,
     "MIN_TIME_TO_COMPLETION_ASK": None,
+    "MAX_TIME_TO_SORT": None,
+    "MAX_TIME_TO_SORT_BID": None,
+    "MAX_TIME_TO_SORT_ASK": None,
+    "MIN_TIME_TO_SORT": None,
+    "MIN_TIME_TO_SORT_BID": None,
+    "MIN_TIME_TO_SORT_ASK": None,
+    "AVERAGE_TIME_TO_SORT": None,
+    "AVERAGE_TIME_TO_SORT_BID": None,
+    "AVERAGE_TIME_TO_SORT_ASK": None,
     "AVERAGE_TIME_TO_COMPLETION": None,
     "AVERAGE_TIME_TO_COMPLETION_BID": None,
     "AVERAGE_TIME_TO_COMPLETION_ASK": None,
@@ -315,7 +324,7 @@ def _get_client_trades_struct(
             filter(
                 lambda _order: identifier
                 in (_order[1]["references"]["ask"], _order[1]["references"]["bid"]),
-                executed_orders[order["instrument"]].items(),
+                executed_orders[order["instrument"]]["PERFORMED"].items(),
             )
         )
 
@@ -409,7 +418,7 @@ def _get_client_metrics_struct(
             filter(
                 lambda _order: identifier
                 in (_order[1]["references"]["ask"], _order[1]["references"]["bid"]),
-                executed_orders[order["instrument"]].items(),
+                executed_orders[order["instrument"]]["PERFORMED"].items(),
             )
         )
 
@@ -730,7 +739,7 @@ def _get_instruments_metrics_struct(
                 }
             )
 
-    for identifier, order in executed_orders.items():
+    for identifier, order in executed_orders["PERFORMED"].items():
         if struct["FIRST_EXECUTE_TIME"] is None or datetime.strptime(
             order["performed"]["at"], DATE_FORMAT
         ) < datetime.strptime(struct["FIRST_EXECUTE_TIME"], DATE_FORMAT):
@@ -811,6 +820,8 @@ def create_report(
         total_orders: List[Dict[str, Any]] = []
         all_orders: Dict[str, Any] = {}
         all_orders_executed: Dict[str, Any] = {}
+        all_metrics_executed: Dict[str, Any] = {}
+
         for _client_path in _client_paths:
             with _client_path.open(mode="r") as client_file:
                 client_file_json = json.load(client_file)
@@ -847,16 +858,26 @@ def create_report(
                 )
             }
 
-        for instrument, exchange_orders in exchange_file_json.items():
+        for instrument, exchange_struct in exchange_file_json.items():
             if instrument not in struct["TRADES"]:
                 struct["TRADES"][instrument] = {}
 
-            for identifier, order in exchange_orders.items():
+            for identifier, order in exchange_struct["PERFORMED"].items():
                 if order["references"]["bid"] not in all_orders_executed:
                     all_orders_executed[order["references"]["bid"]] = order
 
                 if order["references"]["ask"] not in all_orders_executed:
                     all_orders_executed[order["references"]["ask"]] = order
+
+            for category, sections in exchange_struct["METRICS"].items():
+                if category not in all_metrics_executed:
+                    all_metrics_executed[category] = {}
+
+                for section in sections:
+                    if section not in all_metrics_executed[category]:
+                        all_metrics_executed[category][section] = []
+
+                    all_metrics_executed[category][section].extend(sections[section])
 
             struct["TRADES"][instrument].update(
                 {
@@ -873,7 +894,7 @@ def create_report(
                             },
                         },
                     }
-                    for key, value in exchange_orders.items()
+                    for key, value in exchange_struct["PERFORMED"].items()
                 }
             )
 
@@ -910,6 +931,15 @@ def create_report(
                 ).total_seconds()
             )
 
+        time_sorted_bid: List[float] = []
+        time_sorted_ask: List[float] = []
+        for category, sections in all_metrics_executed.items():
+            for section_struct in sections["pairs"]:
+                if section_struct["type"] == "bid":
+                    time_sorted_bid.extend(section_struct["timings"])
+                else:
+                    time_sorted_ask.extend(section_struct["timings"])
+
         struct["METRICS"] = METRICS_STRUCTURE.copy()
         struct["METRICS"].update(
             {
@@ -941,6 +971,40 @@ def create_report(
                 / len(time_completion_bid),
                 "AVERAGE_TIME_TO_COMPLETION_ASK": sum(time_completion_ask)
                 / len(time_completion_ask),
+                "MAX_TIME_TO_SORT": max(time_sorted_bid + time_sorted_ask)
+                if time_sorted_bid or time_sorted_ask
+                else None,
+                "MAX_TIME_TO_SORT_BID": max(time_sorted_bid)
+                if time_sorted_bid
+                else None,
+                "MAX_TIME_TO_SORT_ASK": max(time_sorted_ask)
+                if time_sorted_ask
+                else None,
+                "MIN_TIME_TO_SORT": min(time_sorted_bid + time_sorted_ask)
+                if time_sorted_bid or time_sorted_ask
+                else None,
+                "MIN_TIME_TO_SORT_BID": min(time_sorted_bid)
+                if time_sorted_bid
+                else None,
+                "MIN_TIME_TO_SORT_ASK": min(time_sorted_ask)
+                if time_sorted_ask
+                else None,
+                "AVERAGE_TIME_TO_SORT": (
+                    sum(time_sorted_bid + time_sorted_ask)
+                    / (len(time_sorted_bid) + len(time_sorted_ask))
+                )
+                if time_sorted_bid or time_sorted_ask
+                else None,
+                "AVERAGE_TIME_TO_SORT_BID": (
+                    sum(time_sorted_bid) / len(time_sorted_bid)
+                )
+                if time_sorted_bid
+                else None,
+                "AVERAGE_TIME_TO_SORT_ASK": (
+                    sum(time_sorted_ask) / len(time_sorted_ask)
+                )
+                if time_sorted_ask
+                else None,
                 "TOTAL_VOLUME_SUBMITTED": sum(
                     [_order["volume"] for _order in all_orders.values()]
                 ),

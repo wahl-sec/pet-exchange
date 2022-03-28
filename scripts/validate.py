@@ -39,8 +39,8 @@ def validate_exchange(path: str) -> bool:
         exchange_file_json = json.load(exchange_file)
 
         print(f"Validating exchange for submitted orders")
-        for instrument, orders in exchange_file_json.items():
-            for identifier, order in orders.items():
+        for instrument, struct in exchange_file_json.items():
+            for identifier, order in struct["PERFORMED"].items():
                 if order["instrument"] != instrument:
                     raise ValueError(
                         f"Instrument mismatch for order: '{identifier}', '{instrument}' != '{order['instrument']}'"
@@ -86,8 +86,8 @@ def validate_executed(path_clients: List[str], path_exchange: str) -> bool:
                     total_orders_results[identifier] = True
 
             print(f"Validating exchange for executed orders for clients")
-            for instrument, executed_orders in exchange_file_json.items():
-                for executed_identifier, executed_order in executed_orders.items():
+            for instrument, struct in exchange_file_json.items():
+                for executed_identifier, executed_order in struct["PERFORMED"].items():
                     for order_type in executed_order["references"].keys():
                         if executed_order["references"][order_type] not in total_orders:
                             print(

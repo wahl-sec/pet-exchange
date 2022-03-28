@@ -147,12 +147,20 @@ message DecryptOrderBookReply {
 // GetMinimumValueRequest
 //
 // Decrypts, compares and gets the minimum of them, then encrypts the minimum and sends back
-message GetMinimumValueRequest {
+message Challenge {
     bytes first = 1;
     bytes second = 2;
-    string instrument = 3;
+}
+
+message GetMinimumValueRequest {
+    repeated Challenge challenges = 1;
+    string instrument = 2;
+}
+
+message ChallengeResult {
+    bytes minimum = 1; // TODO: This could be a bool or something instead to lower overhead
 }
 
 message GetMinimumValueReply {
-    bytes minimum = 1;
+   repeated ChallengeResult challenges = 1;
 }

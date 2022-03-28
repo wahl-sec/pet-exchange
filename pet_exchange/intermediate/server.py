@@ -114,22 +114,22 @@ class IntermediateServer(grpc_services.IntermediateProtoServicer):
         self, request: grpc_buffer.GetMinimumValueRequest, context: grpc.ServicerContext
     ) -> grpc_buffer.GetMinimumValueReply:
         handler = self._key_engine.key_handler(instrument=request.instrument)
-        if handler.decrypt_int(request.first) < handler.decrypt_int(request.second):
-            return grpc_buffer.GetMinimumValueReply(minimum=request.first)
-        else:
-            return grpc_buffer.GetMinimumValueReply(minimum=request.second)
+        _challenges: List[ChallengeReply] = []
+        for challenge in request.challenges:
+            _challenges.append(grpc_buffer.ChallengeResult(minimum=challenge.first) if handler._schema_engine.decrypt_float(challenge.first) < handler._schema_engine.decrypt_float(challenge.second) else grpc_buffer.ChallengeResult(minimum=challenge.second))
+
+        return grpc_buffer.GetMinimumValueReply(challenges=_challenges)
 
     @route_logger_sync(grpc_buffer.GetMinimumValueReply)
     def GetMinimumValueFloat(
         self, request: grpc_buffer.GetMinimumValueRequest, context: grpc.ServicerContext
     ) -> grpc_buffer.GetMinimumValueReply:
         handler = self._key_engine.key_handler(instrument=request.instrument)
-        if handler._schema_engine.decrypt_float(
-            request.first
-        ) < handler._schema_engine.decrypt_float(request.second):
-            return grpc_buffer.GetMinimumValueReply(minimum=request.first)
-        else:
-            return grpc_buffer.GetMinimumValueReply(minimum=request.second)
+        _challenges: List[ChallengeReply] = []
+        for challenge in request.challenges:
+            _challenges.append(grpc_buffer.ChallengeResult(minimum=challenge.first) if handler._schema_engine.decrypt_float(challenge.first) < handler._schema_engine.decrypt_float(challenge.second) else grpc_buffer.ChallengeResult(minimum=challenge.second))
+
+        return grpc_buffer.GetMinimumValueReply(challenges=_challenges)
 
 
 async def serve(

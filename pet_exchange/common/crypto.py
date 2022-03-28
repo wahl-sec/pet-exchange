@@ -15,8 +15,9 @@ BFV_PARAMETERS = {"p": 65537, "n": 4096, "sec": 128}
 # scale - scaling factor - defines encoding precision for the binary representation of coefficients, bigger is better (precision), bigger is worse (performance?)`
 CKKS_PARAMETERS = {
     "n": 2 ** 14,
-    "qs": [42] + [32] * 11 + [42],
-    # "qs": [31] + [25] * 15 + [31],
+    # "qs": [42] + [32] * 6, Min for compare2
+    "qs": [42] + [32] * 11 + [42], # Min for compare
+    # "qs": [24] + [23] * 18,
     "scale": 2 ** 32,
 }
 
@@ -285,13 +286,14 @@ class CKKS:
         )
 
     def encrypt_sub_plain_float(
-        self, ciphertext: bytes, value: float, to_bytes: bool = True
+        self, ciphertext: bytes, value: float, to_bytes: bool = True, new_ctxt: bool = True
     ) -> bytes:
-        _ctxt = self._pyfhel.sub_plain(
-            ctxt=PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel),
-            ptxt=self._pyfhel.encodeFrac(np.array([value])),
-            in_new_ctxt=True,
+        _ctxt_r = self._pyfhel.sub_plain(
+            ctxt=PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel) if isinstance(ciphertext, bytes) else ciphertext,
+            ptxt=self._pyfhel.encodeFrac(np.array([value])) if isinstance(value, float) else value,
+            in_new_ctxt=new_ctxt,
         )
+        _ctxt = _ctxt_r if new_ctxt else ciphertext
         return _ctxt.to_bytes() if to_bytes else _ctxt
 
     def encrypt_sub_ciphertext_int(self, ciphertext: bytes, value: bytes) -> bytes:
