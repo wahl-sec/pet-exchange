@@ -181,9 +181,30 @@ class ExchangeServer(grpc_services.ExchangeProtoServicer):
 
 
 def _start_matcher(
-    matcher: MatchingEngine, encrypted: Optional[str], local_sort: bool
+    matcher: MatchingEngine,
+    encrypted: Optional[str],
+    local_sort: bool,
+    compare_fn: int,
+    compare_iterations: int,
+    compare_inverse_iterations: int,
+    compare_inverse_iterations_prim: int,
+    compare_approximation_value: int,
+    compare_constant_count: int,
+    compare_sigmoid_iterations: int,
+    challenge_count: int,
 ) -> NoReturn:
-    matcher.match(encrypted=encrypted, local_sort=local_sort)
+    matcher.match(
+        encrypted=encrypted,
+        local_sort=local_sort,
+        compare_fn=compare_fn,
+        compare_iterations=compare_iterations,
+        compare_inverse_iterations=compare_inverse_iterations,
+        compare_inverse_iterations_prim=compare_inverse_iterations_prim,
+        compare_approximation_value=compare_approximation_value,
+        compare_constant_count=compare_constant_count,
+        compare_sigmoid_iterations=compare_sigmoid_iterations,
+        challenge_count=challenge_count,
+    )
 
 
 async def serve(
@@ -195,6 +216,14 @@ async def serve(
     exchange_output: str,
     instruments: List[str],
     local_sort: bool,
+    compare_fn: int,
+    compare_iterations: int,
+    compare_inverse_iterations: int,
+    compare_inverse_iterations_prim: int,
+    compare_approximation_value: int,
+    compare_constant_count: int,
+    compare_sigmoid_iterations: int,
+    challenge_count: int,
 ) -> NoReturn:
     server = grpc.aio.server(
         options=[
@@ -216,7 +245,18 @@ async def serve(
     with concurrent.futures.ThreadPoolExecutor(max_workers=5) as pool:
         logger.info(f"{matcher.__name__} ({listen_addr}): Waiting for orders ...")
         pool.submit(
-            _start_matcher, matcher=matcher, encrypted=encrypted, local_sort=local_sort
+            _start_matcher,
+            matcher=matcher,
+            encrypted=encrypted,
+            local_sort=local_sort,
+            compare_fn=compare_fn,
+            compare_iterations=compare_iterations,
+            compare_inverse_iterations=compare_inverse_iterations,
+            compare_inverse_iterations_prim=compare_inverse_iterations_prim,
+            compare_approximation_value=compare_approximation_value,
+            compare_constant_count=compare_constant_count,
+            compare_sigmoid_iterations=compare_sigmoid_iterations,
+            challenge_count=challenge_count,
         )
 
         # Runs on the main child-process

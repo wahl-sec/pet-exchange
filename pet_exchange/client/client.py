@@ -157,6 +157,7 @@ async def client(
 
             if encrypted is not None:
                 _, _scheme_engine = keys[order["instrument"]]
+                start_time = time.time()
                 _processed_order = _order(
                     **{
                         "instrument": order["instrument"],
@@ -177,6 +178,7 @@ async def client(
                     ),
                 )
             else:
+                start_time = time.time()
                 _processed_order = _order(
                     **{
                         "instrument": order["instrument"],
@@ -192,6 +194,10 @@ async def client(
                         else {}
                     ),
                 )
+
+            end_time = time.time()
+            # Time to encrypt / process order
+            process_time = end_time - start_time
 
             while (
                 _start is not None
@@ -216,6 +222,9 @@ async def client(
                 "instrument": order["instrument"],
                 "type": order["type"],
                 "volume": order["volume"],
+                "metrics": {
+                    "process": process_time
+                },
                 **(
                     {"price": order["price"]}
                     if exchange_order_type == ExchangeOrderType.LIMIT

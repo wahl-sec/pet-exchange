@@ -139,7 +139,6 @@ async def serve(
     exchange_port: int,
     encrypted: Optional[str],
     instruments: List[str],
-    local_sort: bool,
 ) -> NoReturn:
     server = grpc.aio.server(
         options=[

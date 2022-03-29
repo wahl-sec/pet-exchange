@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-# TODO: Control and run the different components using argparse here, i.e `python pet-exchange -i -a 0.0.0.0 -p 8080` to start the intermediate component on 0.0.0.0:8080
+# TODO: Control and run the different components using argparse here, i.e 'python pet-exchange -i -a 0.0.0.0 -p 8080' to start the intermediate component on 0.0.0.0:8080
 from argparse import ArgumentParser, RawTextHelpFormatter, Namespace
 from typing import NoReturn, Callable, Dict, List, Any
 from pathlib import Path
@@ -46,6 +46,14 @@ SERVER_VARIABLES = {
         "cryptographic",
         "exchange_output",
         "exchange_local_sort",
+        "exchange_compare",
+        "exchange_compare_iterations",
+        "exchange_compare_inverse_iterations",
+        "exchange_compare_inverse_iterations_prim",
+        "exchange_compare_approximation_value",
+        "exchange_compare_constant_count",
+        "exchange_compare_sigmoid_iterations",
+        "exchange_challenge_count",
     ],
     "intermediate": [
         "intermediate_host",
@@ -54,7 +62,6 @@ SERVER_VARIABLES = {
         "exchange_port",
         "plaintext",
         "cryptographic",
-        "exchange_local_sort",
     ],
 }
 
@@ -210,8 +217,39 @@ async def start(args: Namespace):
                 del _servers[arg]["plaintext"]
                 del _servers[arg]["cryptographic"]
 
-                _servers[arg]["local_sort"] = _servers[arg]["exchange_local_sort"]
-                del _servers[arg]["exchange_local_sort"]
+                if _component == "exchange":
+                    _servers[arg]["local_sort"] = _servers[arg]["exchange_local_sort"]
+                    del _servers[arg]["exchange_local_sort"]
+                    _servers[arg]["compare_fn"] = _servers[arg]["exchange_compare"]
+                    del _servers[arg]["exchange_compare"]
+                    _servers[arg]["compare_iterations"] = _servers[arg][
+                        "exchange_compare_iterations"
+                    ]
+                    del _servers[arg]["exchange_compare_iterations"]
+                    _servers[arg]["compare_inverse_iterations"] = _servers[arg][
+                        "exchange_compare_inverse_iterations"
+                    ]
+                    del _servers[arg]["exchange_compare_inverse_iterations"]
+                    _servers[arg]["compare_inverse_iterations_prim"] = _servers[arg][
+                        "exchange_compare_inverse_iterations_prim"
+                    ]
+                    del _servers[arg]["exchange_compare_inverse_iterations_prim"]
+                    _servers[arg]["compare_approximation_value"] = _servers[arg][
+                        "exchange_compare_approximation_value"
+                    ]
+                    del _servers[arg]["exchange_compare_approximation_value"]
+                    _servers[arg]["compare_constant_count"] = _servers[arg][
+                        "exchange_compare_constant_count"
+                    ]
+                    del _servers[arg]["exchange_compare_constant_count"]
+                    _servers[arg]["compare_sigmoid_iterations"] = _servers[arg][
+                        "exchange_compare_sigmoid_iterations"
+                    ]
+                    del _servers[arg]["exchange_compare_sigmoid_iterations"]
+                    _servers[arg]["challenge_count"] = _servers[arg][
+                        "exchange_challenge_count"
+                    ]
+                    del _servers[arg]["exchange_challenge_count"]
 
             pool.map(
                 _start_server,
@@ -267,14 +305,14 @@ if __name__ == "__main__":
     exchange.add_argument(
         "-e:h",
         "--exchange-host",
-        help="Host address to run the exchange component on, e.g `[::]` or `0.0.0.0`",
+        help="Host address to run the exchange component on, e.g '[::]' or '0.0.0.0'",
         type=str,
         default="[::]",
     )
     exchange.add_argument(
         "-e:p",
         "--exchange-port",
-        help="Host port used to communicate with the exchange component on, e.g `50050`",
+        help="Host port used to communicate with the exchange component on, e.g '50050'",
         type=int,
         default=50050,
     )
@@ -300,6 +338,62 @@ if __name__ == "__main__":
         help="Sort the orders locally on the exchange even for encrypted trading, this slows down trading severly due to the performance of the matching",
         action="store_true",
     )
+    exchange.add_argument(
+        "-e:c",
+        "--exchange-compare",
+        help="Compare function to use for the semi-local approximative compare",
+        type=int,
+        choices=[1, 2],
+        default=1,
+    )
+    exchange.add_argument(
+        "-e:ci",
+        "--exchange-compare-iterations",
+        help="Number of iterations to run the approximative compare algorithm for, works for both compare functions",
+        type=int,
+        default=1,
+    )
+    exchange.add_argument(
+        "-e:cii",
+        "--exchange-compare-inverse-iterations",
+        help="Number of iterations to run the approximative inverse algorithm, works for compare function '1'",
+        type=int,
+        default=2,
+    )
+    exchange.add_argument(
+        "-e:ciip",
+        "--exchange-compare-inverse-iterations-prim",
+        help="Initial iteration for the approximative inverse algorithm for, works for compare function '1'",
+        type=int,
+        default=1,
+    )
+    exchange.add_argument(
+        "-e:cap",
+        "--exchange-compare-approximation-value",
+        help="Approximation value for the first compare function '1'",
+        type=int,
+        default=2**1,
+    )
+    exchange.add_argument(
+        "-e:chi",
+        "--exchange-compare-sigmoid-iterations",
+        help="Number of iterations to run the sigmoid approximation for the second compare function '2'",
+        type=int,
+        default=3,
+    )
+    exchange.add_argument(
+        "-e:ccc",
+        "--exchange-compare-constant-count",
+        help="The constant count to use for the second compare function '2'",
+        choices=[3, 5, 9],
+        default=3,
+    )
+    exchange.add_argument(
+        "-e:cc",
+        "--exchange-challenge-count",
+        help="Number of challenges to add to minimal value requests for the intermediate",
+        default=3,
+    )
 
     intermediate = parser.add_argument_group("Intermediate")
     intermediate.add_argument(
@@ -311,14 +405,14 @@ if __name__ == "__main__":
     intermediate.add_argument(
         "-i:h",
         "--intermediate-host",
-        help="Host address to run the intermediate component on, e.g `[::]` or `0.0.0.0`",
+        help="Host address to run the intermediate component on, e.g '[::]' or '0.0.0.0'",
         type=str,
         default="[::]",
     )
     intermediate.add_argument(
         "-i:p",
         "--intermediate-port",
-        help="Host port used to communicate with the exchange component on, e.g `50051`",
+        help="Host port used to communicate with the exchange component on, e.g '50051'",
         type=int,
         default=50051,
     )
@@ -328,7 +422,7 @@ if __name__ == "__main__":
         "-c:i",
         "--client-input-files",
         help="Path(s) to client input file detailing the orders to replay for the trading for each client/broker, can be multiple order files\n"
-        "Example files can be found under `pet-exchange/example/orders.json` and should detail the clients plaintext order intentions",
+        "Example files can be found under 'pet-exchange/example/orders.json' and should detail the clients plaintext order intentions",
         nargs="*",
         type=str,
         default=[],
@@ -376,7 +470,7 @@ if __name__ == "__main__":
         and not args.client_input_files
     ):
         logging.error(
-            "No components/clients were defined please see `-h`, `--help` for more details on usage"
+            "No components/clients were defined please see '-h', '--help' for more details on usage"
         )
         parser.print_usage()
         exit(0)

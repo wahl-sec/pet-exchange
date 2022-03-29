@@ -19,7 +19,11 @@ import pet_exchange.proto.exchange_pb2 as grpc_buffer
 import pet_exchange.proto.intermediate_pb2 as grpc_buffer_intermediate
 from pet_exchange.proto.intermediate_pb2 import Challenge
 from pet_exchange.exchange.book import EncryptedOrderBook, OrderBook
-from pet_exchange.common.utils import generate_random_int, generate_random_float, generate_challenges
+from pet_exchange.common.utils import (
+    generate_random_int,
+    generate_random_float,
+    generate_challenges,
+)
 from pet_exchange.common.types import OrderType
 from pet_exchange.common.crypto import BFV, CKKS
 from pet_exchange.utils.logging import TRADE_LOG_LEVEL
@@ -63,7 +67,11 @@ class MatchingEngine:
             _file.write(json.dumps(_book))
 
     def _match_encrypted(
-        self, instrument: str, book: EncryptedOrderBook, scheme: str
+        self,
+        instrument: str,
+        book: EncryptedOrderBook,
+        scheme: str,
+        challenge_count: int,
     ) -> Tuple[EncryptedOrderBook, List[str], List[str]]:
         bid_queue = book.queue(type=OrderType.BID)
         ask_queue = book.queue(type=OrderType.ASK)
@@ -117,11 +125,36 @@ class MatchingEngine:
                 _price_pad,
             )
 
-            _minimum_otp_price = self._intermediate_channel.GetMinimumValue(
-                challenges=[Challenge(first=b_otp_price, second=a_otp_price)],
-                instrument=instrument,
-                encoding="float",
-            ).challenges[0].minimum
+            expected, challenges = generate_challenges(
+                engine=_scheme_engine, n=challenge_count
+            )
+            index = randint(0, len(challenges) - 1)
+            _challenges: List[Challenge] = (
+                challenges[:index]
+                + [Challenge(first=b_otp_price, second=a_otp_price)]
+                + challenges[index:]
+            )
+            start_time = time.time()
+            challenges = self._intermediate_channel.GetMinimumValue(
+                challenges=_challenges, instrument=instrument, encoding="float"
+            ).challenges
+            end_time = time.time()
+
+            results: List[int] = []
+            for _index, challenge in enumerate(challenges):
+                if index == _index:
+                    continue
+
+                results.append(
+                    -1 if challenge.minimum == _challenges[_index].first else 1
+                )
+
+            if results != expected:
+                logger.error(
+                    f"Intermediate returned wrong result for comparing padded price"
+                )
+
+            _minimum_otp_price = challenges[index].minimum
 
             if b_otp_price == _minimum_otp_price and a_otp_price != _minimum_otp_price:
                 logger.info(
@@ -136,11 +169,36 @@ class MatchingEngine:
                     a_order.volume, float(_volume_pad)
                 )
 
-                _minimum_otp_volume = self._intermediate_channel.GetMinimumValue(
-                    challenges=[Challenge(first=b_otp_volume, second=a_otp_volume)],
-                    instrument=instrument,
-                    encoding="float",
-                ).challenges[0].minimum
+                expected, challenges = generate_challenges(
+                    engine=_scheme_engine, n=challenge_count
+                )
+                index = randint(0, len(challenges) - 1)
+                _challenges: List[Challenge] = (
+                    challenges[:index]
+                    + [Challenge(first=b_otp_volume, second=a_otp_volume)]
+                    + challenges[index:]
+                )
+                start_time = time.time()
+                challenges = self._intermediate_channel.GetMinimumValue(
+                    challenges=_challenges, instrument=instrument, encoding="float"
+                ).challenges
+                end_time = time.time()
+
+                results: List[int] = []
+                for _index, challenge in enumerate(challenges):
+                    if index == _index:
+                        continue
+
+                    results.append(
+                        -1 if challenge.minimum == _challenges[_index].first else 1
+                    )
+
+                if results != expected:
+                    logger.error(
+                        f"Intermediate returned wrong result for comparing padded volume"
+                    )
+
+                _minimum_otp_volume = challenges[index].minimum
 
                 _minimum_volume = _scheme_engine.encrypt_sub_plain_float(
                     _minimum_otp_volume,
@@ -279,6 +337,14 @@ class MatchingEngine:
         book: Union[EncryptedOrderBook, OrderBook],
         encrypted: Optional[str],
         local_sort: bool,
+        compare_fn: int,
+        compare_iterations: int,
+        compare_inverse_iterations: int,
+        compare_inverse_iterations_prim: int,
+        compare_approximation_value: int,
+        compare_sigmoid_iterations: int,
+        compare_constant_count: int,
+        challenge_count: int,
     ) -> Tuple[Union[EncryptedOrderBook, OrderBook], List[str], List[str]]:
         """Match one iteration of orders agaist each other"""
         # TODO: We should create some sort of safe state to operate on the book since orders can theoretically be added during matching
@@ -300,21 +366,37 @@ class MatchingEngine:
                 """Compare two encrypted item and return the smallest using the remote intermediate."""
                 _, first = first
                 _, second = second
-                start_time = time.time()
-                result = (
-                    -1
-                    if (
-                        self._intermediate_channel.GetMinimumValue(
-                            first=first.price,
-                            second=second.price,
-                            instrument=instrument,
-                            encoding="float",
-                        ).minimum
-                        == first.price
-                    )
-                    else 1
+
+                expected, challenges = generate_challenges(
+                    engine=_scheme_engine, n=challenge_count
                 )
+                index = randint(0, len(challenges) - 1)
+                _challenges: List[Challenge] = (
+                    challenges[:index]
+                    + [Challenge(first=x.to_bytes(), second=half)]
+                    + challenges[index:]
+                )
+                start_time = time.time()
+                challenges = self._intermediate_channel.GetMinimumValue(
+                    challenges=_challenges, instrument=instrument, encoding="float"
+                ).challenges
                 end_time = time.time()
+
+                results: List[int] = []
+                for _index, challenge in enumerate(challenges):
+                    if index == _index:
+                        continue
+
+                    results.append(
+                        -1 if challenge.minimum == _challenges[_index].first else 1
+                    )
+
+                if results != expected:
+                    logger.error(
+                        f"Intermediate returned wrong result for remote compare"
+                    )
+
+                result = -1 if challenges[index].minimum == x.to_bytes() else 1
 
                 expected = (
                     -1
@@ -336,6 +418,7 @@ class MatchingEngine:
                     grpc_buffer.CiphertextLimitOrder, grpc_buffer.CiphertextMarketOrder
                 ],
                 _scheme_engine: Union[BFV, CKKS],
+                compare_fn: int,
                 correct_counter: List[bool],
                 total_counter: List[bool],
                 total_timings: List[float],
@@ -471,7 +554,9 @@ class MatchingEngine:
                     half = _scheme_engine._pyfhel.encodeFrac(np.array([0.5]))
                     _scheme_engine._pyfhel.mod_switch_to_next(half)
                     a = scale_down(value=a, l=L, half=half)
+                    a_scaled = PyCtxt(copy_ctxt=a)
                     b = scale_down(value=b, l=L, half=half)
+                    b_scaled = PyCtxt(copy_ctxt=b)
 
                     # Depth
                     # a -> 2
@@ -963,30 +1048,47 @@ class MatchingEngine:
                     # a multiplicate depth of 5 + 2 + 1 * (2 + 2) = 11 for 'a' meaning we would need 12 primes in total
 
                     half = _scheme_engine.encrypt_float(0.5)
-                    result = (
-                        -1
-                        if (
-                            self._intermediate_channel.GetMinimumValue(
-                                first=a.to_bytes(),
-                                second=half,
-                                instrument=instrument,
-                                encoding="float",
-                            ).minimum
-                            == a.to_bytes()
-                        )
-                        else 1
+                    expected, challenges = generate_challenges(
+                        engine=_scheme_engine, n=challenge_count
                     )
+                    index = randint(0, len(challenges) - 1)
+                    _challenges: List[Challenge] = (
+                        challenges[:index]
+                        + [Challenge(first=a.to_bytes(), second=half)]
+                        + challenges[index:]
+                    )
+                    start_time = time.time()
+                    challenges = self._intermediate_channel.GetMinimumValue(
+                        challenges=_challenges, instrument=instrument, encoding="float"
+                    ).challenges
+                    end_time = time.time()
+
+                    results: List[int] = []
+                    for _index, challenge in enumerate(challenges):
+                        if index == _index:
+                            continue
+
+                        results.append(
+                            -1 if challenge.minimum == _challenges[_index].first else 1
+                        )
+
+                    if results != expected:
+                        logger.error(f"Intermediate returned wrong result for sorting")
+
+                    _a = _scheme_engine.decrypt_float(a)
+                    _b = _scheme_engine.decrypt_float(b)
+
+                    result = -1 if challenges[index].minimum == a.to_bytes() else 1
                     expected = -1 if _scheme_engine.decrypt_float(a) < 0.5 else 1
+
+                    logger.debug(
+                        f"a = {_scheme_engine.decrypt_float(a_scaled)}, b = {_scheme_engine.decrypt_float(b_scaled)}, x = {_a}, f = {_scheme_engine.decrypt_float(first)}, s = {_scheme_engine.decrypt_float(second)}"
+                    )
 
                     return result, expected
 
                 def compare2(
-                    first,
-                    second,
-                    inverse_iterations,
-                    inverse_iterations_prim,
-                    iterations,
-                    approximation_value,
+                    first, second, iterations, sigmoid_iterations, constant_count
                 ):
                     """Compare two values encrypted homomorphically and return result."""
                     # x <- a - b
@@ -998,10 +1100,10 @@ class MatchingEngine:
                     a = PyCtxt(serialized=first, pyfhel=_scheme_engine._pyfhel)
                     b = PyCtxt(serialized=second, pyfhel=_scheme_engine._pyfhel)
 
-                    def func(x, n, d, _pre_calc, _sum):
+                    def func(x, iterations, constant_index, _pre_calc, _sum):
                         _x = {1: PyCtxt(copy_ctxt=x)}
 
-                        for i in range(1, n + 1, 2):
+                        for i in range(1, iterations + 1, 2):
                             if i > 1:
                                 for _ in range(2):
                                     _scheme_engine.encrypt_mult_ciphertext_float(
@@ -1024,24 +1126,6 @@ class MatchingEngine:
                             )
                             _scheme_engine._pyfhel.rescale_to_next(_res)
                             _res.round_scale()
-
-                            if d == 3 and i == 1:
-                                _scheme_engine._pyfhel.mod_switch_to_next(_sum)
-                                _scheme_engine._pyfhel.mod_switch_to_next(_sum)
-                                _scheme_engine._pyfhel.mod_switch_to_next(_sum)
-                            if d == 5 and i == 1:
-                                _scheme_engine._pyfhel.mod_switch_to_next(_sum)
-                                _scheme_engine._pyfhel.mod_switch_to_next(_sum)
-                            if d == 7 and i == 1:
-                                _scheme_engine._pyfhel.mod_switch_to_next(_sum)
-                                _scheme_engine._pyfhel.mod_switch_to_next(_sum)
-                                _scheme_engine._pyfhel.mod_switch_to_next(_sum)
-
-                            if d == 9 and i == 1:
-                                _scheme_engine._pyfhel.mod_switch_to_next(_sum)
-                                _scheme_engine._pyfhel.mod_switch_to_next(_sum)
-                                _scheme_engine._pyfhel.mod_switch_to_next(_sum)
-                                _scheme_engine._pyfhel.mod_switch_to_next(_sum)
 
                             _scheme_engine.encrypt_add_ciphertext_float(
                                 ciphertext=_sum,
@@ -1074,24 +1158,38 @@ class MatchingEngine:
                         ciphertext=a, value=b, to_bytes=False, new_ctxt=True
                     )
 
-                    n = 1
-                    _pre_calc = {1: 3 / 2, 3: -1 / 2}
-                    # _pre_calc = {1: 15 / 8, 3: -10 / 8, 5: 3 / 8}
-                    # _pre_calc = {1: 315 / 128, 3: -420 / 128, 5: 378 / 128, 7: -180 / 128, 9: 35 / 128}
-                    for i in range(1, max(_pre_calc) + 1, 2):
+                    if constant_count == 3:
+                        _pre_calc = {1: 3 / 2, 3: -1 / 2}
+                    elif constant_count == 5:
+                        _pre_calc = {1: 15 / 8, 3: -10 / 8, 5: 3 / 8}
+                    elif constant_count == 9:
+                        _pre_calc = {
+                            1: 315 / 128,
+                            3: -420 / 128,
+                            5: 378 / 128,
+                            7: -180 / 128,
+                            9: 35 / 128,
+                        }
+                    else:
+                        raise ValueError(
+                            f"Invalid constant count: '{constant_count}' for compare"
+                        )
+
+                    for i in range(1, constant_count + 1, 2):
                         _pre_calc[i] = _scheme_engine._pyfhel.encodeFrac(
                             np.array([_pre_calc[i]])
                         )
+
                         for _ in range(i):
                             _scheme_engine._pyfhel.mod_switch_to_next(_pre_calc[i])
 
-                    for i in range(1, n + 1, 2):
+                    for i in range(1, iterations + 1, 2):
                         _sum = _scheme_engine.encrypt_float(value=0.0, to_bytes=False)
                         for _ in range(i + 1):
                             _scheme_engine._pyfhel.mod_switch_to_next(_sum)
 
-                        x = func(x, 3, i, _pre_calc, _sum)
-                        if i + 1 >= n:
+                        x = func(x, sigmoid_iterations, i, _pre_calc, _sum)
+                        if i + 1 >= iterations:
                             break
 
                         for i in range(1, max(_pre_calc) + 1, 2):
@@ -1099,14 +1197,14 @@ class MatchingEngine:
                                 _scheme_engine._pyfhel.mod_switch_to_next(_pre_calc[i])
 
                     one = _scheme_engine._pyfhel.encodeFrac(np.array([1.0]))
-                    for _ in range(2 * n + 2):
+                    for _ in range(2 * iterations + 2):
                         _scheme_engine._pyfhel.mod_switch_to_next(one)
 
                     _scheme_engine.encrypt_add_plain_float(
                         ciphertext=x, value=one, to_bytes=False, new_ctxt=False
                     )
 
-                    for _ in range(2 * n + 1):
+                    for _ in range(2 * iterations + 1):
                         _scheme_engine._pyfhel.mod_switch_to_next(half)
 
                     _scheme_engine.encrypt_mult_plain_float(
@@ -1116,13 +1214,17 @@ class MatchingEngine:
                     x.round_scale()
 
                     half = _scheme_engine.encrypt_float(0.5)
-                    expected, challenges = generate_challenges(engine=_scheme_engine, n=3)
+                    expected, challenges = generate_challenges(
+                        engine=_scheme_engine, n=challenge_count
+                    )
                     index = randint(0, len(challenges) - 1)
-                    _challenges: List[Challenge] = challenges[:index] + [Challenge(first=x.to_bytes(), second=half)] + challenges[index:]
+                    _challenges: List[Challenge] = (
+                        challenges[:index]
+                        + [Challenge(first=x.to_bytes(), second=half)]
+                        + challenges[index:]
+                    )
                     challenges = self._intermediate_channel.GetMinimumValue(
-                        challenges=_challenges,
-                        instrument=instrument,
-                        encoding="float"
+                        challenges=_challenges, instrument=instrument, encoding="float"
                     ).challenges
 
                     results: List[int] = []
@@ -1130,23 +1232,41 @@ class MatchingEngine:
                         if index == _index:
                             continue
 
-                        results.append(-1 if challenge.minimum == _challenges[_index].first else 1)
+                        results.append(
+                            -1 if challenge.minimum == _challenges[_index].first else 1
+                        )
 
                     if results != expected:
                         logger.error(f"Intermediate returned wrong result for sorting")
 
                     result = -1 if challenges[index].minimum == x.to_bytes() else 1
+
+                    logger.debug(
+                        f"a = {_scheme_engine.decrypt_float(a)}, b = {_scheme_engine.decrypt_float(b)}, x = {_scheme_engine.decrypt_float(x)}, f = {_scheme_engine.decrypt_float(first)}, s = {_scheme_engine.decrypt_float(second)}"
+                    )
+
                     return result, expected
 
                 start_sort = time.time()
-                result, expected = compare2(
-                    first,
-                    second,
-                    inverse_iterations=2,
-                    inverse_iterations_prim=1,
-                    iterations=1,
-                    approximation_value=2**1,
-                )
+                if compare_fn == 1:
+                    result, expected = compare(
+                        first,
+                        second,
+                        inverse_iterations=compare_inverse_iterations,
+                        inverse_iterations_prim=compare_inverse_iterations_prim,
+                        iterations=compare_iterations,
+                        approximation_value=compare_approximation_value,
+                    )
+                elif compare_fn == 2:
+                    result, expected = compare2(
+                        first,
+                        second,
+                        iterations=compare_iterations,
+                        sigmoid_iterations=compare_sigmoid_iterations,
+                        constant_count=compare_constant_count,
+                    )
+                else:
+                    raise ValueError(f"Invalid compare option: '{compare_fn}'")
                 end_sort = time.time()
 
                 correct_counter.append(result == expected)
@@ -1161,7 +1281,7 @@ class MatchingEngine:
                     _scheme_engine = CKKS(pyfhel=self.pyfhel[instrument])
                 else:
                     raise ValueError(
-                        f"Unknown cryptographic scheme type provided: '_){encrypted}'"
+                        f"Unknown cryptographic scheme type provided: '{encrypted}'"
                     )
 
                 correct_counter_bid = []
@@ -1178,8 +1298,10 @@ class MatchingEngine:
                         correct_counter=correct_counter_bid,
                         total_counter=total_counter_bid,
                         total_timings=total_timings_bid,
+                        compare_fn=compare_fn,
                     ),
                 )
+
                 sort_bid_end = time.time()
                 correct_counter_bid = sum(correct_counter_bid)
                 total_counter_bid = len(total_counter_bid)
@@ -1216,6 +1338,7 @@ class MatchingEngine:
                         correct_counter=correct_counter_ask,
                         total_counter=total_counter_ask,
                         total_timings=total_timings_ask,
+                        compare_fn=compare_fn,
                     ),
                 )
                 sort_ask_end = time.time()
@@ -1387,18 +1510,32 @@ class MatchingEngine:
             return self._match(instrument=instrument, book=book)
         elif encrypted in ("bfv", "ckks"):
             return self._match_encrypted(
-                instrument=instrument, book=book, scheme=encrypted
+                instrument=instrument,
+                book=book,
+                scheme=encrypted,
+                challenge_count=challenge_count,
             )
         else:
             raise ValueError(
                 f"Unknown cryptographic scheme type provided: '{encrypted}'"
             )
 
-    def match(self, encrypted: Optional[str], local_sort: bool) -> NoReturn:
+    def match(
+        self,
+        encrypted: Optional[str],
+        local_sort: bool,
+        compare_fn: int,
+        compare_iterations: int,
+        compare_inverse_iterations: int,
+        compare_inverse_iterations_prim: int,
+        compare_approximation_value: int,
+        compare_constant_count: int,
+        compare_sigmoid_iterations: int,
+        challenge_count: int,
+    ) -> NoReturn:
         """Continously match incoming orders against each other
         Runs the sub matchers _match and _match_plaintext depending on if the orders are encrypted
         """
-        # TODO: Number of threads should be based on some estimation of instruments being traded at the same time
         with ThreadPoolExecutor(max_workers=10) as pool:
             while True:
                 try:
@@ -1418,6 +1555,14 @@ class MatchingEngine:
                                     book=deepcopy(book),
                                     encrypted=encrypted,
                                     local_sort=local_sort,
+                                    compare_fn=compare_fn,
+                                    compare_iterations=compare_iterations,
+                                    compare_inverse_iterations=compare_inverse_iterations,
+                                    compare_inverse_iterations_prim=compare_inverse_iterations_prim,
+                                    compare_approximation_value=compare_approximation_value,
+                                    compare_constant_count=compare_constant_count,
+                                    compare_sigmoid_iterations=compare_sigmoid_iterations,
+                                    challenge_count=challenge_count,
                                 )
                             ] = instrument
 
