@@ -98,6 +98,18 @@ class MatchingEngine:
             logger.debug(f"{self.__name__} ({instrument}): No more ask orders ...")
             return book, b_dropped, a_dropped
 
+        a_order_price = PyCtxt(serialized=a_order.price, pyfhel=_scheme_engine._pyfhel)
+        _scheme_engine._depth_map[hash(a_order_price)] = 1
+
+        b_order_price = PyCtxt(serialized=b_order.price, pyfhel=_scheme_engine._pyfhel)
+        _scheme_engine._depth_map[hash(b_order_price)] = 1
+
+        a_order_volume = PyCtxt(serialized=a_order.price, pyfhel=_scheme_engine._pyfhel)
+        _scheme_engine._depth_map[hash(a_order_volume)] = 1
+
+        b_order_volume = PyCtxt(serialized=b_order.volume, pyfhel=_scheme_engine._pyfhel)
+        _scheme_engine._depth_map[hash(b_order_volume)] = 1
+
         while True:
             if b_identifier in b_dropped:
                 try:
@@ -117,11 +129,13 @@ class MatchingEngine:
                     )
                     return book, b_dropped, a_dropped
 
-            _price_pad = generate_random_float()
+            _price_pad = _scheme_engine.encode_float(values=[generate_random_float()])
+            _scheme_engine._depth_map[hash(_price_pad)] = 1
+
             b_otp_price, a_otp_price = _scheme_engine.encrypt_add_plain_float(
-                b_order.price, _price_pad
+                b_order_price, _price_pad
             ), _scheme_engine.encrypt_add_plain_float(
-                a_order.price,
+                a_order_price,
                 _price_pad,
             )
 
@@ -162,11 +176,12 @@ class MatchingEngine:
                 )
                 break
             else:
-                _volume_pad = generate_random_int()
+                _volume_pad = _scheme_engine.encode_float(values=[float(generate_random_int())])
+                _scheme_engine._depth_map[hash(_volume_pad)] = 1
                 b_otp_volume, a_otp_volume = _scheme_engine.encrypt_add_plain_float(
-                    b_order.volume, float(_volume_pad)
+                    b_order_volume, _volume_pad
                 ), _scheme_engine.encrypt_add_plain_float(
-                    a_order.volume, float(_volume_pad)
+                    a_order_volume, _volume_pad
                 )
 
                 expected, challenges = generate_challenges(
@@ -199,32 +214,33 @@ class MatchingEngine:
                     )
 
                 _minimum_otp_volume = challenges[index].minimum
+                _scheme_engine._depth_map[hash(_minimum_otp_volume)] = _scheme_engine._depth_map[hash(_volume_pad)]
 
                 _minimum_volume = _scheme_engine.encrypt_sub_plain_float(
                     _minimum_otp_volume,
-                    float(_volume_pad),
+                    _volume_pad,
                 )
 
                 b_order_c, a_order_c = deepcopy(b_order), deepcopy(a_order)
                 if b_otp_volume == _minimum_otp_volume:
-                    b_order.volume = ZERO_VOLUME
+                    b_order_volume = ZERO_VOLUME
                     b_dropped.append(b_identifier)
                 else:
-                    b_order.volume = _scheme_engine.encrypt_sub_ciphertext_float(
-                        b_order.volume, _minimum_volume
+                    b_order_volume = _scheme_engine.encrypt_sub_ciphertext_float(
+                        b_order_volume, _minimum_volume
                     )
 
                 if a_otp_volume == _minimum_otp_volume:
-                    a_order.volume = ZERO_VOLUME
+                    a_order_volume = ZERO_VOLUME
                     a_dropped.append(a_identifier)
                 else:
-                    a_order.volume = _scheme_engine.encrypt_sub_ciphertext_float(
-                        a_order.volume, _minimum_volume
+                    a_order_volume = _scheme_engine.encrypt_sub_ciphertext_float(
+                        a_order_volume, _minimum_volume
                     )
 
                 logger.log(
                     level=TRADE_LOG_LEVEL,
-                    msg=f"{self.__name__} ({instrument}): Trade 'BID' ({b_identifier}) V ({b_order_c.volume.hex()[:20]}) -> V ({b_order.volume.hex()[:20]}), 'ASK' ({a_identifier}) V ({a_order_c.volume.hex()[:20]}) -> V ({a_order.volume.hex()[:20]}) for P ({a_order.price.hex()[:20]})",
+                    msg=f"{self.__name__} ({instrument}): Trade 'BID' ({b_identifier}) V ({b_order_c.volume.hex()[:20]}) -> V ({b_order_volume.hex()[:20]}), 'ASK' ({a_identifier}) V ({a_order_c.volume.hex()[:20]}) -> V ({a_order_volume.hex()[:20]}) for P ({a_order_price.to_bytes().hex()[:20]})",
                 )
 
                 d_order = self._intermediate_channel.DecryptOrder(
@@ -232,7 +248,7 @@ class MatchingEngine:
                         type=a_order.type,
                         instrument=instrument,
                         volume=_minimum_volume,
-                        price=a_order.price,
+                        price=a_order_price.to_bytes(),
                     ),
                     entity_bid=b_order.entity,
                     entity_ask=a_order.entity,
@@ -337,11 +353,7 @@ class MatchingEngine:
         book: Union[EncryptedOrderBook, OrderBook],
         encrypted: Optional[str],
         local_sort: bool,
-        compare_fn: int,
         compare_iterations: int,
-        compare_inverse_iterations: int,
-        compare_inverse_iterations_prim: int,
-        compare_approximation_value: int,
         compare_sigmoid_iterations: int,
         compare_constant_count: int,
         challenge_count: int,
@@ -418,7 +430,6 @@ class MatchingEngine:
                     grpc_buffer.CiphertextLimitOrder, grpc_buffer.CiphertextMarketOrder
                 ],
                 _scheme_engine: Union[BFV, CKKS],
-                compare_fn: int,
                 correct_counter: List[bool],
                 total_counter: List[bool],
                 total_timings: List[float],
@@ -433,83 +444,14 @@ class MatchingEngine:
                 _, second = second
                 first, second = first.price, second.price
 
-                def inverse_estimation(
-                    a: PyCtxt, b: PyCtxt, one: PyPtxt, iterations: int
-                ) -> PyCtxt:
-                    """Goldschmidt's divison algorithm is used to estimate the inverse of a given value
-                    It follows the identity that:
-                    (1 / x) = (1 / (1 - (1 - x))) = pSUM_i=0_inf(1 + (1 - x)^(2^i)) ~= pSUM_i=0_d(1 + (1 - x)^(2^i))
-                    So for a sufficient d large enough (1 + (1 - x)^(2^i)) converges 1 as 1 -> inf
-                    """
-                    # a0 <- 2 - x
-                    # b0 <- 1 - x
-                    # for n <- 0 to d-1 do
-                    #     b_n+1 <- b_n^2
-                    #     a_n+1 <- a_n * (1 + b_n+1)
-                    # end for
-                    # return a_d
-
-                    # Depth
-                    # a -> 0
-                    # b -> 0
-                    # one -> 0
-
-                    for index in range(iterations):
-                        _scheme_engine.encrypt_square(
-                            ciphertext=b, new_ctxt=False, to_bytes=False
-                        )
-                        _scheme_engine._pyfhel.relinearize(b)
-                        _scheme_engine._pyfhel.rescale_to_next(b)
-                        b.round_scale()
-
-                        # Depth
-                        # a -> 0
-                        # b -> 1
-                        # one -> 0
-                        b_plus_one = _scheme_engine.encrypt_add_plain_float(
-                            ciphertext=b, value=one, new_ctxt=True, to_bytes=False
-                        )
-
-                        _scheme_engine.encrypt_mult_ciphertext_float(
-                            ciphertext=a,
-                            value=b_plus_one,
-                            new_ctxt=False,
-                            to_bytes=False,
-                        )
-                        _scheme_engine._pyfhel.relinearize(a)
-                        _scheme_engine._pyfhel.rescale_to_next(a)
-                        a.round_scale()
-
-                        # Depth
-                        # a -> 1
-                        # b -> 1
-                        # one -> 0
-
-                        if iterations > 1 and index < (iterations - 1):
-                            _scheme_engine._pyfhel.mod_switch_to_next(one)
-
-                        # Depth
-                        # a -> 1
-                        # b -> 1
-                        # one -> (i - 1)
-
-                    # Depth
-                    # a -> i
-                    # b -> i
-                    # one -> (i - 1)
-
-                    return a
-
                 def scale_down(value: PyCtxt, l: float, half: PyPtxt) -> PyCtxt:
                     """Scales down the value to the range [0, 1] using a given value l
                     _a = 0.5 + (a / 2 ** l)
                     """
-                    denom = _scheme_engine._pyfhel.encodeFrac(np.array([1 / (2**l)]))
+                    denom = _scheme_engine.encode_float(values=[1 / (2**l)])
                     _scheme_engine.encrypt_mult_plain_float(
                         ciphertext=value, value=denom, to_bytes=False, new_ctxt=False
                     )
-                    _scheme_engine._pyfhel.rescale_to_next(value)
-                    value.round_scale()
 
                     _scheme_engine.encrypt_add_plain_float(
                         ciphertext=value, value=half, to_bytes=False, new_ctxt=False
@@ -528,566 +470,6 @@ class MatchingEngine:
                     return value
 
                 def compare(
-                    first,
-                    second,
-                    inverse_iterations,
-                    inverse_iterations_prim,
-                    iterations,
-                    approximation_value,
-                ):
-                    """Compare two values encrypted homomorphically and return result."""
-                    # a0 <- (a / 2) * Inv((a + b) / 2, d)
-                    # b0 <- (1 - a0)
-                    # for n in range(t):
-                    #    inv <- Inv((a_n)^m + (b_n)^m, d)
-                    #    a_n+1 <- (a_n)^m * inv
-                    #    b_n+1 <- 1 - a_n+1
-                    # return a_t
-                    a = PyCtxt(serialized=first, pyfhel=_scheme_engine._pyfhel)
-                    b = PyCtxt(serialized=second, pyfhel=_scheme_engine._pyfhel)
-
-                    # Depth
-                    # a -> 1
-                    # b -> 1
-
-                    L = 8
-                    half = _scheme_engine._pyfhel.encodeFrac(np.array([0.5]))
-                    _scheme_engine._pyfhel.mod_switch_to_next(half)
-                    a = scale_down(value=a, l=L, half=half)
-                    a_scaled = PyCtxt(copy_ctxt=a)
-                    b = scale_down(value=b, l=L, half=half)
-                    b_scaled = PyCtxt(copy_ctxt=b)
-
-                    # Depth
-                    # a -> 2
-                    # b -> 2
-                    # half -> 2
-
-                    one = _scheme_engine._pyfhel.encodeFrac(np.array([1.0]))
-                    _scheme_engine._pyfhel.mod_switch_to_next(one)
-                    two = _scheme_engine._pyfhel.encodeFrac(np.array([2.0]))
-                    _scheme_engine._pyfhel.mod_switch_to_next(two)
-
-                    # Depth
-                    # a -> 2
-                    # b -> 2
-                    # half -> 2
-                    # one -> 2
-                    # two -> 2
-
-                    a_plus_b = _scheme_engine.encrypt_add_ciphertext_float(
-                        ciphertext=a, value=b, new_ctxt=True, to_bytes=False
-                    )
-
-                    a_div_two = _scheme_engine.encrypt_mult_plain_float(
-                        ciphertext=a, value=half, new_ctxt=True, to_bytes=False
-                    )
-                    _scheme_engine._pyfhel.relinearize(a_div_two)
-                    _scheme_engine._pyfhel.rescale_to_next(a_div_two)
-                    a_div_two.round_scale()
-
-                    # Depth
-                    # a -> 2
-                    # b -> 2
-                    # half -> 2
-                    # one -> 2
-                    # two -> 2
-                    # a_plus_b -> 2
-                    # a_div_two -> 3
-
-                    a_plus_b_div_two = _scheme_engine.encrypt_mult_plain_float(
-                        ciphertext=a_plus_b, value=half, new_ctxt=True, to_bytes=False
-                    )
-                    _scheme_engine._pyfhel.relinearize(a_plus_b_div_two)
-                    _scheme_engine._pyfhel.rescale_to_next(a_plus_b_div_two)
-                    a_plus_b_div_two.round_scale()
-
-                    _scheme_engine._pyfhel.mod_switch_to_next(one)
-                    _scheme_engine._pyfhel.mod_switch_to_next(two)
-
-                    # Depth
-                    # a -> 2
-                    # b -> 2
-                    # half -> 2
-                    # one -> 3
-                    # two -> 3
-                    # a_plus_b -> 2
-                    # a_div_two -> 3
-                    # a_plus_b_div_two -> 3
-
-                    a_plus_b_div_two_neg = _scheme_engine._pyfhel.negate(
-                        a_plus_b_div_two, in_new_ctxt=True
-                    )
-                    _a = _scheme_engine.encrypt_add_plain_float(
-                        ciphertext=a_plus_b_div_two_neg,
-                        value=two,
-                        to_bytes=False,
-                        new_ctxt=True,
-                    )
-
-                    _b = _scheme_engine.encrypt_add_plain_float(
-                        ciphertext=a_plus_b_div_two_neg,
-                        value=one,
-                        to_bytes=False,
-                        new_ctxt=True,
-                    )
-
-                    # Depth
-                    # a -> 2
-                    # _a -> 3
-                    # b -> 2
-                    # _b -> 3
-                    # half -> 2
-                    # one -> 3
-                    # two -> 3
-                    # a_plus_b -> 2
-                    # a_div_two -> 3
-                    # a_plus_b_div_two -> 3
-                    # a_plus_b_div_two_neg -> 3
-
-                    _scheme_engine._pyfhel.mod_switch_to_next(one)
-                    # for _ in range(inverse_iterations_prim):         B
-                    _scheme_engine._pyfhel.mod_switch_to_next(_a)
-
-                    # Depth
-                    # a -> 2
-                    # _a -> 3 + i'
-                    # b -> 2
-                    # _b -> 3
-                    # half -> 2
-                    # one -> 4
-                    # two -> 3
-                    # a_plus_b -> 2
-                    # a_div_two -> 3
-                    # a_plus_b_div_two -> 3
-                    # a_plus_b_div_two_neg -> 3
-
-                    inv = inverse_estimation(
-                        a=_a, b=_b, one=one, iterations=inverse_iterations_prim
-                    )
-
-                    # Depth
-                    # a -> 2
-                    # _a -> 3 + 2 * i'
-                    # b -> 2
-                    # _b -> 3 + i'
-                    # half -> 2
-                    # one -> 4 + (i' - 1)
-                    # two -> 3
-                    # a_plus_b -> 2
-                    # a_div_two -> 3
-                    # a_plus_b_div_two -> 3
-                    # a_plus_b_div_two_neg -> 3
-
-                    for _ in range(inverse_iterations_prim + 1):
-                        _scheme_engine._pyfhel.mod_switch_to_next(
-                            a_div_two
-                        )  # Mod switch twice to match 'b' parms
-
-                    # Depth
-                    # a -> 2
-                    # _a -> 3 + 2 * i'
-                    # b -> 2
-                    # _b -> 3 + i'
-                    # half -> 2
-                    # one -> 4 + (i' - 1)
-                    # two -> 3
-                    # a_plus_b -> 2
-                    # a_div_two -> 4 + i'
-                    # a_plus_b_div_two -> 3
-                    # a_plus_b_div_two_neg -> 3
-
-                    a = _scheme_engine.encrypt_mult_ciphertext_float(
-                        ciphertext=a_div_two, value=inv, new_ctxt=True, to_bytes=False
-                    )
-                    _scheme_engine._pyfhel.relinearize(a)
-                    _scheme_engine._pyfhel.rescale_to_next(a)
-                    a.round_scale()
-
-                    # Depth
-                    # a -> 5 + i'
-                    # _a -> 3 + 2 * i'
-                    # b -> 2
-                    # _b -> 3 + i'
-                    # half -> 2
-                    # one -> 4 + (i' - 1)
-                    # two -> 3
-                    # a_plus_b -> 2
-                    # a_div_two -> 4 + i'
-                    # a_plus_b_div_two -> 3
-                    # a_plus_b_div_two_neg -> 3
-
-                    # one = _scheme_engine._pyfhel.encodeFrac(np.array([1.0]))
-                    _scheme_engine._pyfhel.mod_switch_to_next(one)
-
-                    # Depth
-                    # a -> 5 + i'
-                    # _a -> 3 + 2 * i'
-                    # b -> 2
-                    # _b -> 3 + i'
-                    # half -> 2
-                    # one -> 4 + i'
-                    # two -> 3
-                    # a_plus_b -> 2
-                    # a_div_two -> 4 + i'
-                    # a_plus_b_div_two -> 3
-                    # a_plus_b_div_two_neg -> 3
-
-                    _scheme_engine._pyfhel.mod_switch_to_next(one)
-                    a_neg = _scheme_engine._pyfhel.negate(a, in_new_ctxt=True)
-                    b = _scheme_engine.encrypt_add_plain_float(
-                        ciphertext=a_neg, value=one, new_ctxt=True, to_bytes=False
-                    )
-
-                    # Depth
-                    # a -> 5 + i'
-                    # _a -> 3 + 2 * i'
-                    # b -> 5 + i'
-                    # _b -> 3 + i'
-                    # half -> 2
-                    # one -> 5 + i'
-                    # two -> 3
-                    # a_plus_b -> 2
-                    # a_div_two -> 4 + i'
-                    # a_plus_b_div_two -> 3
-                    # a_plus_b_div_two_neg -> 3
-                    # a_neg -> 5 + i'
-
-                    for _ in range(3 + inverse_iterations_prim - 1):
-                        _scheme_engine._pyfhel.mod_switch_to_next(two)
-
-                    # Depth
-                    # a -> 5 + i'
-                    # _a -> 3 + 2 * i'
-                    # b -> 5 + i'
-                    # _b -> 3 + i'
-                    # half -> 2
-                    # one -> 5 + i'
-                    # two -> 5 + i'
-                    # a_plus_b -> 2
-                    # a_div_two -> 4 + i'
-                    # a_plus_b_div_two -> 3
-                    # a_plus_b_div_two_neg -> 3
-                    # a_neg -> 5 + i'
-
-                    for _ in range(iterations):
-                        a_pow = PyCtxt(copy_ctxt=a)
-                        for _ in range(approximation_value - 1):
-                            _scheme_engine.encrypt_mult_ciphertext_float(
-                                ciphertext=a_pow,
-                                value=a,
-                                to_bytes=False,
-                                new_ctxt=False,
-                            )
-                            _scheme_engine._pyfhel.relinearize(a_pow)
-                            _scheme_engine._pyfhel.rescale_to_next(a_pow)
-                            a_pow.round_scale()
-
-                            # Depth
-                            # a_pow -> a - 1
-
-                            _scheme_engine._pyfhel.mod_switch_to_next(a)
-                            _scheme_engine._pyfhel.mod_switch_to_next(two)
-
-                            # Depth
-                            # a -> a - 1
-                            # a_pow -> a - 1
-                            # two -> a - 1
-
-                        # Depth
-                        # a_pow -> a - 1
-                        # a -> a - 1
-                        # two -> a - 1
-
-                        b_pow = PyCtxt(copy_ctxt=b)
-                        for i in range(approximation_value - 1):
-                            _scheme_engine.encrypt_mult_ciphertext_float(
-                                ciphertext=b_pow,
-                                value=b,
-                                to_bytes=False,
-                                new_ctxt=False,
-                            )
-                            _scheme_engine._pyfhel.relinearize(b_pow)
-                            _scheme_engine._pyfhel.rescale_to_next(b_pow)
-                            b_pow.round_scale()
-
-                            # Depth
-                            # b_pow -> a - 1
-
-                            _scheme_engine._pyfhel.mod_switch_to_next(b)
-                            _scheme_engine._pyfhel.mod_switch_to_next(one)
-
-                            # Depth
-                            # b -> a - 1
-                            # b_pow -> a - 1
-                            # one -> a - 1
-
-                        # Depth
-                        # a -> a - 1
-                        # b -> a - 1
-                        # a_pow -> a - 1
-                        # b_pow -> a - 1
-                        # one -> a - 1
-                        # two -> a - 1
-
-                        a_pow_plus_b_pow = _scheme_engine.encrypt_add_ciphertext_float(
-                            ciphertext=a_pow, value=b_pow, new_ctxt=True, to_bytes=False
-                        )
-
-                        # Depth
-                        # a -> a - 1
-                        # a_pow -> a - 1
-                        # b_pow -> a - 1
-                        # one -> a - 1
-                        # two -> a - 1
-                        # a_pow_plus_b_pow -> a - 1
-
-                        a_pow_plus_b_pow_neg = _scheme_engine._pyfhel.negate(
-                            a_pow_plus_b_pow, in_new_ctxt=True
-                        )
-                        a_a = _scheme_engine.encrypt_add_plain_float(
-                            ciphertext=a_pow_plus_b_pow_neg,
-                            value=two,
-                            to_bytes=False,
-                            new_ctxt=True,
-                        )
-
-                        b_b = _scheme_engine.encrypt_add_plain_float(
-                            ciphertext=a_pow_plus_b_pow_neg,
-                            value=one,
-                            to_bytes=False,
-                            new_ctxt=True,
-                        )
-
-                        # Depth
-                        # a -> a - 1
-                        # a_a -> a - 1
-                        # b -> a - 1
-                        # b_b -> a - 1
-                        # a_pow -> a - 1
-                        # b_pow -> a - 1
-                        # one -> a - 1
-                        # two -> a - 1
-                        # a_pow_plus_b_pow -> a - 1
-                        # a_pow_plus_b_pow_neg -> a - 1
-
-                        _scheme_engine._pyfhel.mod_switch_to_next(one)
-
-                        # Depth
-                        # a -> a - 1
-                        # a_a -> a - 1
-                        # b -> a - 1
-                        # b_b -> a - 1
-                        # a_pow -> a - 1
-                        # b_pow -> a - 1
-                        # one -> a
-                        # two -> a - 1
-                        # a_pow_plus_b_pow -> a - 1
-                        # a_pow_plus_b_pow_neg -> a - 1
-
-                        for _ in range(inverse_iterations):
-                            _scheme_engine._pyfhel.mod_switch_to_next(a_a)
-
-                        # Depth
-                        # a -> a - 1
-                        # a_a -> a - 1 + i
-                        # b -> a - 1
-                        # b_b -> a - 1
-                        # a_pow -> a - 1
-                        # b_pow -> a - 1
-                        # one -> a
-                        # two -> a - 1
-                        # a_pow_plus_b_pow -> a - 1
-                        # a_pow_plus_b_pow_neg -> a - 1
-
-                        for _ in range(inverse_iterations - 1):
-                            _scheme_engine._pyfhel.mod_switch_to_next(b_b)
-                            _scheme_engine._pyfhel.mod_switch_to_next(one)
-
-                        # Depth
-                        # a -> a - 1
-                        # a_a -> a - 1 + i
-                        # b -> a - 1
-                        # b_b -> a - 2 + i
-                        # a_pow -> a - 1
-                        # b_pow -> a - 1
-                        # one -> a - 1 + i
-                        # two -> a - 1
-                        # a_pow_plus_b_pow -> a - 1
-                        # a_pow_plus_b_pow_neg -> a - 1
-
-                        inv = inverse_estimation(
-                            a=a_a, b=b_b, one=one, iterations=inverse_iterations
-                        )
-
-                        # Depth
-                        # a -> a - 1
-                        # a_a -> a - 1 + 2 * i
-                        # b -> a - 1
-                        # b_b -> a - 2 + 2 * i
-                        # a_pow -> a - 1
-                        # b_pow -> a - 1
-                        # one -> a - 2 + 2 * i
-                        # two -> a - 1
-                        # inv -> a - 1 + 2 * i
-                        # a_pow_plus_b_pow -> a - 1
-                        # a_pow_plus_b_pow_neg -> a - 1
-
-                        # for _ in range(inverse_iterations + 1):
-                        #    _scheme_engine._pyfhel.mod_switch_to_next(one)
-
-                        # Depth
-                        # a -> a - 1
-                        # a_a -> a - 1 + 2 * i
-                        # b -> a - 1
-                        # b_b -> a - 2 + 2 * i
-                        # a_pow -> a - 1
-                        # b_pow -> a - 1
-                        # one -> a - 2 + 2 * i
-                        # two -> a - 1
-                        # inv -> a - 1 + 2 * i
-                        # a_pow_plus_b_pow -> a - 1
-                        # a_pow_plus_b_pow_neg -> a - 1
-
-                        for _ in range(2 * inverse_iterations):
-                            _scheme_engine._pyfhel.mod_switch_to_next(a_pow)
-
-                        # Depth
-                        # a -> a - 1
-                        # a_a -> a - 1 + 2 * i
-                        # b -> a - 1
-                        # b_b -> a - 2 + 2 * i
-                        # a_pow -> a - i + 2 * i
-                        # b_pow -> a - 1
-                        # one -> a - 2 + 2 * i
-                        # two -> a - 1
-                        # inv -> a - 1 + 2 * i
-                        # a_pow_plus_b_pow -> a - 1
-                        # a_pow_plus_b_pow_neg -> a - 1
-
-                        a = _scheme_engine.encrypt_mult_ciphertext_float(
-                            ciphertext=a_pow, value=inv, new_ctxt=True, to_bytes=False
-                        )
-                        _scheme_engine._pyfhel.relinearize(a)
-                        _scheme_engine._pyfhel.rescale_to_next(a)
-                        a.round_scale()
-
-                        # Depth
-                        # a -> a + 2 * i
-                        # a_a -> a - 1 + 2 * i
-                        # b -> a - 1
-                        # b_b -> a - 2 + 2 * i
-                        # a_pow -> a - 1 + 2 * i
-                        # b_pow -> a - 1
-                        # one -> a - 2 + 2 * i
-                        # two -> a - 1
-                        # inv -> a - 1 + 2 * i
-                        # a_pow_plus_b_pow -> a - 1
-                        # a_pow_plus_b_pow_neg -> a - 1
-
-                        for _ in range(2):
-                            _scheme_engine._pyfhel.mod_switch_to_next(one)
-
-                        # Depth
-                        # a -> a + 2 * i
-                        # a_a -> a - 1 + 2 * i
-                        # b -> a + 1 + i
-                        # b_b -> a - 2 + 2 * i
-                        # a_pow -> a - 1 + 2 * i
-                        # b_pow -> a - 1
-                        # one -> a + 2 * i
-                        # two -> a - 1
-                        # inv -> a - 1 + 2 * i
-                        # a_pow_plus_b_pow -> a - 1
-                        # a_pow_plus_b_pow_neg -> a - 1
-
-                        a_a_neg = _scheme_engine._pyfhel.negate(a, in_new_ctxt=True)
-                        b = _scheme_engine.encrypt_add_plain_float(
-                            ciphertext=a_a_neg, value=one, new_ctxt=True, to_bytes=False
-                        )
-
-                        for _ in range(3):
-                            _scheme_engine._pyfhel.mod_switch_to_next(two)
-
-                        # Depth
-                        # a -> a + 2 * i
-                        # a_a -> a - 1 + 2 * i
-                        # b -> a + 1 + i
-                        # b_b -> a - 2 + 2 * i
-                        # a_pow -> a - 1 + 2 * i
-                        # b_pow -> a - 1
-                        # one -> a + 2 * i
-                        # two -> a + 1
-                        # inv -> a - 1 + 2 * i
-                        # a_pow_plus_b_pow -> a - 1
-                        # a_pow_plus_b_pow_neg -> a - 1
-                        # a_a_neg -> a + 2
-
-                    # Depth
-                    # a -> 5 + i' + I * (a + 2 * i)
-                    # _a -> 3 + 2 * i'
-                    # a_a -> I * (a - 1 + 2 * i)
-                    # b -> 5 + i' + I * (a + 1 + i)
-                    # _b -> 3 + i'
-                    # b_b -> I * (a - 2 + 2 * i)
-                    # half -> 2
-                    # one -> 5 + i' + I * (a + 2 * i)
-                    # two -> 5 + i' + I * (a + 1)
-                    # a_plus_b -> 2
-                    # a_div_two -> 4 + i'
-                    # a_plus_b_div_two -> 3
-                    # a_plus_b_div_two_neg -> 3
-                    # a_neg -> 5 + i'
-                    # a_a_neg -> a + 2
-
-                    # 5 + 3 + (2 + 2 * 3) = 16
-                    # Our minimal depth is 10 because of the depth of 'a' and 'one'
-                    # That means we must have at least 10 + 1 primes, 10 for multiplicate depth and 1 for decryption
-                    #
-                    # If we want to increase the iterations of say i' to 2 we would get
-                    # a multiplicate depth of 5 + 2 + 1 * (2 + 2) = 11 for 'a' meaning we would need 12 primes in total
-
-                    half = _scheme_engine.encrypt_float(0.5)
-                    expected, challenges = generate_challenges(
-                        engine=_scheme_engine, n=challenge_count
-                    )
-                    index = randint(0, len(challenges) - 1)
-                    _challenges: List[Challenge] = (
-                        challenges[:index]
-                        + [Challenge(first=a.to_bytes(), second=half)]
-                        + challenges[index:]
-                    )
-                    start_time = time.time()
-                    challenges = self._intermediate_channel.GetMinimumValue(
-                        challenges=_challenges, instrument=instrument, encoding="float"
-                    ).challenges
-                    end_time = time.time()
-
-                    results: List[int] = []
-                    for _index, challenge in enumerate(challenges):
-                        if index == _index:
-                            continue
-
-                        results.append(
-                            -1 if challenge.minimum == _challenges[_index].first else 1
-                        )
-
-                    if results != expected:
-                        logger.error(f"Intermediate returned wrong result for sorting")
-
-                    _a = _scheme_engine.decrypt_float(a)
-                    _b = _scheme_engine.decrypt_float(b)
-
-                    result = -1 if challenges[index].minimum == a.to_bytes() else 1
-                    expected = -1 if _scheme_engine.decrypt_float(a) < 0.5 else 1
-
-                    logger.debug(
-                        f"a = {_scheme_engine.decrypt_float(a_scaled)}, b = {_scheme_engine.decrypt_float(b_scaled)}, x = {_a}, f = {_scheme_engine.decrypt_float(first)}, s = {_scheme_engine.decrypt_float(second)}"
-                    )
-
-                    return result, expected
-
-                def compare2(
                     first, second, iterations, sigmoid_iterations, constant_count
                 ):
                     """Compare two values encrypted homomorphically and return result."""
@@ -1100,8 +482,13 @@ class MatchingEngine:
                     a = PyCtxt(serialized=first, pyfhel=_scheme_engine._pyfhel)
                     b = PyCtxt(serialized=second, pyfhel=_scheme_engine._pyfhel)
 
-                    def func(x, iterations, constant_index, _pre_calc, _sum):
+                    _scheme_engine._depth_map[hash(a)] = 1
+                    _scheme_engine._depth_map[hash(b)] = 1
+
+                    def func(x, iterations, constant_index, _pre_calc):
                         _x = {1: PyCtxt(copy_ctxt=x)}
+                        _scheme_engine._depth_map[hash(_x[1])] = _scheme_engine._depth_map[hash(x)]
+                        _sum = _scheme_engine.encrypt_float(value=0.0, to_bytes=False)
 
                         for i in range(1, iterations + 1, 2):
                             if i > 1:
@@ -1112,11 +499,6 @@ class MatchingEngine:
                                         to_bytes=False,
                                         new_ctxt=False,
                                     )
-                                    _scheme_engine._pyfhel.relinearize(_x[i])
-                                    _scheme_engine._pyfhel.rescale_to_next(_x[i])
-                                    _x[i].round_scale()
-                                    _scheme_engine._pyfhel.mod_switch_to_next(x)
-                                    _scheme_engine._pyfhel.mod_switch_to_next(_sum)
 
                             _res = _scheme_engine.encrypt_mult_plain_float(
                                 ciphertext=_x[i],
@@ -1124,8 +506,6 @@ class MatchingEngine:
                                 new_ctxt=True,
                                 to_bytes=False,
                             )
-                            _scheme_engine._pyfhel.rescale_to_next(_res)
-                            _res.round_scale()
 
                             _scheme_engine.encrypt_add_ciphertext_float(
                                 ciphertext=_sum,
@@ -1134,8 +514,8 @@ class MatchingEngine:
                                 new_ctxt=False,
                             )
 
-                            # _scheme_engine._pyfhel.mod_switch_to_next(x)
                             _x[i + 2] = PyCtxt(copy_ctxt=x)
+                            _scheme_engine._depth_map[hash(_x[i + 2])] = _scheme_engine._depth_map[hash(x)]
 
                         return _sum
 
@@ -1144,8 +524,7 @@ class MatchingEngine:
                     # b -> 1
 
                     L = 8
-                    half = _scheme_engine._pyfhel.encodeFrac(np.array([0.5]))
-                    _scheme_engine._pyfhel.mod_switch_to_next(half)
+                    half = _scheme_engine.encode_float(values=[0.5])
 
                     a = scale_down(value=a, l=L, half=half)
                     b = scale_down(value=b, l=L, half=half)
@@ -1176,42 +555,24 @@ class MatchingEngine:
                         )
 
                     for i in range(1, constant_count + 1, 2):
-                        _pre_calc[i] = _scheme_engine._pyfhel.encodeFrac(
-                            np.array([_pre_calc[i]])
+                        _pre_calc[i] = _scheme_engine.encode_float(
+                            [_pre_calc[i]]
                         )
 
-                        for _ in range(i):
-                            _scheme_engine._pyfhel.mod_switch_to_next(_pre_calc[i])
-
-                    for i in range(1, iterations + 1, 2):
-                        _sum = _scheme_engine.encrypt_float(value=0.0, to_bytes=False)
-                        for _ in range(i + 1):
-                            _scheme_engine._pyfhel.mod_switch_to_next(_sum)
-
-                        x = func(x, sigmoid_iterations, i, _pre_calc, _sum)
+                    for i in range(iterations):
+                        x = func(x, sigmoid_iterations, i, _pre_calc)
                         if i + 1 >= iterations:
                             break
 
-                        for i in range(1, max(_pre_calc) + 1, 2):
-                            for _ in range(3):
-                                _scheme_engine._pyfhel.mod_switch_to_next(_pre_calc[i])
-
-                    one = _scheme_engine._pyfhel.encodeFrac(np.array([1.0]))
-                    for _ in range(2 * iterations + 2):
-                        _scheme_engine._pyfhel.mod_switch_to_next(one)
+                    one = _scheme_engine.encode_float([1.0])
 
                     _scheme_engine.encrypt_add_plain_float(
                         ciphertext=x, value=one, to_bytes=False, new_ctxt=False
                     )
 
-                    for _ in range(2 * iterations + 1):
-                        _scheme_engine._pyfhel.mod_switch_to_next(half)
-
                     _scheme_engine.encrypt_mult_plain_float(
                         ciphertext=x, value=half, to_bytes=False, new_ctxt=False
                     )
-                    _scheme_engine._pyfhel.rescale_to_next(x)
-                    x.round_scale()
 
                     half = _scheme_engine.encrypt_float(0.5)
                     expected, challenges = generate_challenges(
@@ -1248,25 +609,13 @@ class MatchingEngine:
                     return result, expected
 
                 start_sort = time.time()
-                if compare_fn == 1:
-                    result, expected = compare(
-                        first,
-                        second,
-                        inverse_iterations=compare_inverse_iterations,
-                        inverse_iterations_prim=compare_inverse_iterations_prim,
-                        iterations=compare_iterations,
-                        approximation_value=compare_approximation_value,
-                    )
-                elif compare_fn == 2:
-                    result, expected = compare2(
-                        first,
-                        second,
-                        iterations=compare_iterations,
-                        sigmoid_iterations=compare_sigmoid_iterations,
-                        constant_count=compare_constant_count,
-                    )
-                else:
-                    raise ValueError(f"Invalid compare option: '{compare_fn}'")
+                result, expected = compare(
+                    first,
+                    second,
+                    iterations=compare_iterations,
+                    sigmoid_iterations=compare_sigmoid_iterations,
+                    constant_count=compare_constant_count,
+                )
                 end_sort = time.time()
 
                 correct_counter.append(result == expected)
@@ -1298,7 +647,6 @@ class MatchingEngine:
                         correct_counter=correct_counter_bid,
                         total_counter=total_counter_bid,
                         total_timings=total_timings_bid,
-                        compare_fn=compare_fn,
                     ),
                 )
 
@@ -1338,7 +686,6 @@ class MatchingEngine:
                         correct_counter=correct_counter_ask,
                         total_counter=total_counter_ask,
                         total_timings=total_timings_ask,
-                        compare_fn=compare_fn,
                     ),
                 )
                 sort_ask_end = time.time()
@@ -1524,11 +871,7 @@ class MatchingEngine:
         self,
         encrypted: Optional[str],
         local_sort: bool,
-        compare_fn: int,
         compare_iterations: int,
-        compare_inverse_iterations: int,
-        compare_inverse_iterations_prim: int,
-        compare_approximation_value: int,
         compare_constant_count: int,
         compare_sigmoid_iterations: int,
         challenge_count: int,
@@ -1555,11 +898,7 @@ class MatchingEngine:
                                     book=deepcopy(book),
                                     encrypted=encrypted,
                                     local_sort=local_sort,
-                                    compare_fn=compare_fn,
                                     compare_iterations=compare_iterations,
-                                    compare_inverse_iterations=compare_inverse_iterations,
-                                    compare_inverse_iterations_prim=compare_inverse_iterations_prim,
-                                    compare_approximation_value=compare_approximation_value,
                                     compare_constant_count=compare_constant_count,
                                     compare_sigmoid_iterations=compare_sigmoid_iterations,
                                     challenge_count=challenge_count,

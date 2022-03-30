@@ -46,11 +46,7 @@ SERVER_VARIABLES = {
         "cryptographic",
         "exchange_output",
         "exchange_local_sort",
-        "exchange_compare",
         "exchange_compare_iterations",
-        "exchange_compare_inverse_iterations",
-        "exchange_compare_inverse_iterations_prim",
-        "exchange_compare_approximation_value",
         "exchange_compare_constant_count",
         "exchange_compare_sigmoid_iterations",
         "exchange_challenge_count",
@@ -220,24 +216,10 @@ async def start(args: Namespace):
                 if _component == "exchange":
                     _servers[arg]["local_sort"] = _servers[arg]["exchange_local_sort"]
                     del _servers[arg]["exchange_local_sort"]
-                    _servers[arg]["compare_fn"] = _servers[arg]["exchange_compare"]
-                    del _servers[arg]["exchange_compare"]
                     _servers[arg]["compare_iterations"] = _servers[arg][
                         "exchange_compare_iterations"
                     ]
                     del _servers[arg]["exchange_compare_iterations"]
-                    _servers[arg]["compare_inverse_iterations"] = _servers[arg][
-                        "exchange_compare_inverse_iterations"
-                    ]
-                    del _servers[arg]["exchange_compare_inverse_iterations"]
-                    _servers[arg]["compare_inverse_iterations_prim"] = _servers[arg][
-                        "exchange_compare_inverse_iterations_prim"
-                    ]
-                    del _servers[arg]["exchange_compare_inverse_iterations_prim"]
-                    _servers[arg]["compare_approximation_value"] = _servers[arg][
-                        "exchange_compare_approximation_value"
-                    ]
-                    del _servers[arg]["exchange_compare_approximation_value"]
                     _servers[arg]["compare_constant_count"] = _servers[arg][
                         "exchange_compare_constant_count"
                     ]
@@ -354,28 +336,7 @@ if __name__ == "__main__":
         default=1,
     )
     exchange.add_argument(
-        "-e:cii",
-        "--exchange-compare-inverse-iterations",
-        help="Number of iterations to run the approximative inverse algorithm, works for compare function '1'",
-        type=int,
-        default=2,
-    )
-    exchange.add_argument(
-        "-e:ciip",
-        "--exchange-compare-inverse-iterations-prim",
-        help="Initial iteration for the approximative inverse algorithm for, works for compare function '1'",
-        type=int,
-        default=1,
-    )
-    exchange.add_argument(
-        "-e:cap",
-        "--exchange-compare-approximation-value",
-        help="Approximation value for the first compare function '1'",
-        type=int,
-        default=2**1,
-    )
-    exchange.add_argument(
-        "-e:chi",
+        "-e:csi",
         "--exchange-compare-sigmoid-iterations",
         help="Number of iterations to run the sigmoid approximation for the second compare function '2'",
         type=int,

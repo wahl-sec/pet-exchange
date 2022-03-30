@@ -15,8 +15,7 @@ BFV_PARAMETERS = {"p": 65537, "n": 4096, "sec": 128}
 # scale - scaling factor - defines encoding precision for the binary representation of coefficients, bigger is better (precision), bigger is worse (performance?)`
 CKKS_PARAMETERS = {
     "n": 2 ** 14,
-    # "qs": [42] + [32] * 6, Min for compare2
-    "qs": [42] + [32] * 11 + [42], # Min for compare
+    "qs": [42] + [32] * 6,
     # "qs": [24] + [23] * 18,
     "scale": 2 ** 32,
 }
@@ -206,6 +205,26 @@ class BFV:
 class CKKS:
     def __init__(self, pyfhel: Pyfhel) -> "CKKS":
         self._pyfhel = pyfhel
+        self._depth_map = {}
+
+    def mod_switch_until(self, first: Union[PyPtxt, PyCtxt], second: Union[PyPtxt, PyCtxt]) -> None:
+        _first = self._depth_map[hash(first)]
+        _second = self._depth_map[hash(second)]
+        if _first < _second:
+            for _ in range(_first, _second):
+                self._pyfhel.mod_switch_to_next(first)
+
+            self._depth_map[hash(first)] += _second - _first
+        else:
+            for _ in range(_second, _first):
+                self._pyfhel.mod_switch_to_next(second)
+
+            self._depth_map[hash(second)] += _first - _second
+
+    def encode_float(self, values: List[float]) -> bytes:
+        _ptxt = self._pyfhel.encodeFrac(np.array(values))
+        self._depth_map[hash(_ptxt)] = 1
+        return _ptxt
 
     def encrypt_string(self, value: str, to_bytes: bool = True) -> bytes:
         _ctxt = self._pyfhel.encrypt(
@@ -228,6 +247,7 @@ class CKKS:
             scale=scale,
             scale_bits=scale_bits,
         )
+        self._depth_map[hash(_ctxt)] = 1
         return _ctxt.to_bytes() if to_bytes else _ctxt
 
     def encrypt_add_plain_int(self, ciphertext: bytes, value: int) -> bytes:
@@ -242,18 +262,17 @@ class CKKS:
         scale: float = 0.0,
         scale_bits: int = 0,
     ) -> bytes:
+        ctxt = PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel) if isinstance(ciphertext, bytes) else ciphertext
+        ptxt = self.encode_float(values=[value]) if isinstance(value, float) else value
+
+        self.mod_switch_until(first=ctxt, second=ptxt)
         _ctxt_r = self._pyfhel.add_plain(
-            ctxt=PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel)
-            if isinstance(ciphertext, bytes)
-            else ciphertext,
-            ptxt=self._pyfhel.encodeFrac(
-                np.array([value]), scale=scale, scale_bits=scale_bits
-            )
-            if isinstance(value, float)
-            else value,
+            ctxt=ctxt,
+            ptxt=ptxt,
             in_new_ctxt=new_ctxt,
         )
         _ctxt = _ctxt_r if new_ctxt else ciphertext
+        self._depth_map[hash(_ctxt)] = self._depth_map[hash(ctxt)]
         return _ctxt.to_bytes() if to_bytes and isinstance(_ctxt, PyCtxt) else _ctxt
 
     def encrypt_add_ciphertext_int(self, ciphertext: bytes, value: bytes) -> bytes:
@@ -266,16 +285,17 @@ class CKKS:
         to_bytes: bool = True,
         new_ctxt: bool = True,
     ) -> bytes:
+        ctxt = PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel) if isinstance(ciphertext, bytes) else ciphertext
+        ctxt_other = PyCtxt(serialized=value, pyfhel=self._pyfhel) if isinstance(value, bytes) else value
+
+        self.mod_switch_until(first=ctxt, second=ctxt_other)
         _ctxt_r = self._pyfhel.add(
-            ctxt=PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel)
-            if isinstance(ciphertext, bytes)
-            else ciphertext,
-            ctxt_other=PyCtxt(serialized=value, pyfhel=self._pyfhel)
-            if isinstance(value, bytes)
-            else value,
+            ctxt=ctxt,
+            ctxt_other=ctxt_other,
             in_new_ctxt=new_ctxt,
         )
         _ctxt = _ctxt_r if new_ctxt else ciphertext
+        self._depth_map[hash(_ctxt)] = self._depth_map[hash(ctxt)]
         return _ctxt.to_bytes() if to_bytes else _ctxt
 
     def encrypt_sub_plain_int(
@@ -288,12 +308,17 @@ class CKKS:
     def encrypt_sub_plain_float(
         self, ciphertext: bytes, value: float, to_bytes: bool = True, new_ctxt: bool = True
     ) -> bytes:
+        ctxt = PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel) if isinstance(ciphertext, bytes) else ciphertext
+        ptxt = self.encode_float(values=[value]) if isinstance(value, float) else value
+
+        self.mod_switch_until(first=ctxt, second=ptxt)
         _ctxt_r = self._pyfhel.sub_plain(
-            ctxt=PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel) if isinstance(ciphertext, bytes) else ciphertext,
-            ptxt=self._pyfhel.encodeFrac(np.array([value])) if isinstance(value, float) else value,
+            ctxt=ctxt,
+            ptxt=ptxt,
             in_new_ctxt=new_ctxt,
         )
         _ctxt = _ctxt_r if new_ctxt else ciphertext
+        self._depth_map[hash(_ctxt)] = self._depth_map[hash(ctxt)]
         return _ctxt.to_bytes() if to_bytes else _ctxt
 
     def encrypt_sub_ciphertext_int(self, ciphertext: bytes, value: bytes) -> bytes:
@@ -306,16 +331,17 @@ class CKKS:
         to_bytes: bool = True,
         new_ctxt: bool = True,
     ) -> bytes:
+        ctxt = PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel) if isinstance(ciphertext, bytes) else ciphertext
+        ctxt_other = PyCtxt(serialized=value, pyfhel=self._pyfhel) if isinstance(value, bytes) else value
+
+        self.mod_switch_until(first=ctxt, second=ctxt_other)
         _ctxt_r = self._pyfhel.sub(
-            ctxt=PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel)
-            if isinstance(ciphertext, bytes)
-            else ciphertext,
-            ctxt_other=PyCtxt(serialized=value, pyfhel=self._pyfhel)
-            if isinstance(value, bytes)
-            else value,
+            ctxt=ctxt,
+            ctxt_other=ctxt_other,
             in_new_ctxt=new_ctxt,
         )
         _ctxt = _ctxt_r if new_ctxt else ciphertext
+        self._depth_map[hash(_ctxt)] = self._depth_map[hash(ctxt)]
         return _ctxt.to_bytes() if to_bytes else _ctxt
 
     def encrypt_mult_plain_int(self, ciphertext: bytes, value: int) -> bytes:
@@ -330,21 +356,21 @@ class CKKS:
         scale: float = 0.0,
         scale_bits: int = 0,
     ) -> bytes:
+        ctxt = PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel) if isinstance(ciphertext, bytes) else ciphertext
+        ptxt = self.encode_float(values=[value]) if isinstance(value, float) else value
+
+        self.mod_switch_until(first=ctxt, second=ptxt)
         _ctxt_r = self._pyfhel.multiply_plain(
-            ctxt=PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel)
-            if isinstance(ciphertext, bytes)
-            else ciphertext,
-            ptxt=self._pyfhel.encodeFrac(
-                arr=np.array([value]), scale=scale, scale_bits=scale_bits
-            )
-            if isinstance(value, float)
-            else value,
+            ctxt=ctxt,
+            ptxt=ptxt,
             in_new_ctxt=new_ctxt,
         )
-        # self._pyfhel.relinearize(ciphertext)
-        # self._pyfhel.mod_switch_to_next(_ctxt)
-        # self._pyfhel.rescale_to_next(ciphertext)
+
         _ctxt = _ctxt_r if new_ctxt else ciphertext
+        self._pyfhel.rescale_to_next(_ctxt)
+        _ctxt.round_scale()
+        self._depth_map[hash(_ctxt)] = self._depth_map[hash(ctxt)] + 1
+
         return _ctxt.to_bytes() if to_bytes else _ctxt
 
     def encrypt_mult_ciphertext_int(self, ciphertext: bytes, value: int) -> bytes:
@@ -357,34 +383,36 @@ class CKKS:
         to_bytes: bool = True,
         new_ctxt: bool = True,
     ) -> bytes:
+        ctxt = PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel) if isinstance(ciphertext, bytes) else ciphertext
+        ctxt_other = PyCtxt(serialized=value, pyfhel=self._pyfhel) if isinstance(value, bytes) else value
+
+        self.mod_switch_until(first=ctxt, second=ctxt_other)
         _ctxt_r = self._pyfhel.multiply(
-            ctxt=PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel)
-            if isinstance(ciphertext, bytes)
-            else ciphertext,
-            ctxt_other=PyCtxt(serialized=value, pyfhel=self._pyfhel)
-            if isinstance(value, bytes)
-            else value,
+            ctxt=ctxt,
+            ctxt_other=ctxt_other,
             in_new_ctxt=new_ctxt,
         )
-        # self._pyfhel.relinearize(ciphertext)
-        # self._pyfhel.mod_switch_to_next(_ctxt)
-        # self._pyfhel.rescale_to_next(ciphertext)
+
         _ctxt = _ctxt_r if new_ctxt else ciphertext
+        self._pyfhel.rescale_to_next(_ctxt)
+        _ctxt.round_scale()
+        self._depth_map[hash(_ctxt)] = self._depth_map[hash(ctxt)] + 1
+
         return _ctxt.to_bytes() if to_bytes else _ctxt
 
     def encrypt_square(
         self, ciphertext: bytes, to_bytes: bool = True, new_ctxt: bool = True
     ) -> bytes:
+        ctxt = PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel) if isinstance(ciphertext, bytes) else ciphertext
         _ctxt_r = self._pyfhel.square(
-            ctxt=PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel)
-            if isinstance(ciphertext, bytes)
-            else ciphertext,
+            ctxt=ctxt,
             in_new_ctxt=new_ctxt,
         )
-        # self._pyfhel.relinearize(_ctxt)
-        # self._pyfhel.mod_switch_to_next(_ctxt)
-        # self._pyfhel.rescale_to_next(_ctxt)
+
         _ctxt = _ctxt_r if new_ctxt else ciphertext
+        self._pyfhel.rescale_to_next(_ctxt)
+        _ctxt.round_scale()
+        self._depth_map[hash(_ctxt)] = self._depth_map[hash(ctxt)] + 1
         return _ctxt.to_bytes() if to_bytes else _ctxt
 
     def encrypt_pow_plain_int(
@@ -398,15 +426,16 @@ class CKKS:
         # This operation is probably very costly in terms of noise and performance
         _ctxt = PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel) if isinstance(ciphertext, bytes) else ciphertext
         for _ in range(value):
-            _ctxt_r = self._pyfhel.multiply(
+            self._pyfhel.multiply(
                 ctxt=_ctxt,
                 ctxt_other=_ctxt,
-                in_new_ctxt=new_ctxt,
+                in_new_ctxt=False,
             )
             self._pyfhel.relinearize(_ctxt)
             self._pyfhel.rescale_to_next(_ctxt)
+            _ctxt.round_scale()
+            self._depth_map[hash(_ctxt)] += 1
 
-        _ctxt = _ctxt_r if new_ctxt else _ctxt
         return _ctxt.to_bytes() if to_bytes else _ctxt
 
     def decrypt_string(self, ciphertext: bytes) -> str:
