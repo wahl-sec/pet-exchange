@@ -5,6 +5,7 @@
 from typing import Union, Dict, List
 from dataclasses import dataclass
 import logging
+import time
 
 from Pyfhel import Pyfhel, PyCtxt
 
@@ -26,6 +27,10 @@ class KeyHandler:
     def __init__(self, instrument: str, scheme: str):
         self.instrument: str = instrument
         self.scheme = scheme
+        self.timings = {
+            "TIME_TO_GENERATE_KEYS": None,
+            "TIME_TO_GENERATE_RELIN_KEYS": None,
+        }
         # Microsoft has some explanation on the parameters for CKKS
         # https://github.com/microsoft/SEAL/blob/main/native/examples/4_ckks_basics.cpp#L78
         self.pyfhel: Pyfhel = Pyfhel()
@@ -67,13 +72,21 @@ class KeyHandler:
 
     def _generate_key_pair(self) -> KeyPair:
         """Generate a public/secret/relinearization key for the given instrument"""
+        start_time = time.time()
         self.pyfhel.keyGen()
+        end_time = time.time()
+        self.timings["TIME_TO_GENERATE_KEYS"] = end_time - start_time
+
+        start_time = time.time()
         self.pyfhel.relinKeyGen()
+        end_time = time.time()
+        self.timings["TIME_TO_GENERATE_RELIN_KEYS"] = end_time - start_time
+
         self._key_pair = KeyPair(
             context=self.pyfhel.to_bytes_context(),
             public=self.pyfhel.to_bytes_public_key(),
             secret=self.pyfhel.to_bytes_secret_key(),
-            relin=self.pyfhel.to_bytes_relin_key()
+            relin=self.pyfhel.to_bytes_relin_key(),
         )
         return self._key_pair
 

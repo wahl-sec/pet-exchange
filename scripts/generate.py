@@ -13,7 +13,7 @@ import json
 from numpy.random import choice as np_choice
 
 GENERAL_POINT = None
-PEAK_PROBABILITY = 0.05
+PEAK_PROBABILITY = 0.1
 DIP_PROBABILITY = 0.05
 MINIMUM_TRADES = 10
 MAXIMUM_TRADES = 20
@@ -220,6 +220,8 @@ def generate_orders(entities: List[Entity]) -> Dict[str, Any]:
     """Generate a JSON structure describing the clients and their orders in the system."""
     max_trade_count = max(entity.trade_count for entity in entities)
     for trade_index in range(1, max_trade_count + 1):
+        if trade_index % 10000 == 0:
+            print(f"Progress: '{trade_index}' finished out of '{max_trade_count}'")
         for entity in entities:
             if trade_index <= entity.trade_count:
                 is_peak, is_dip = False, False
@@ -277,7 +279,7 @@ if __name__ == "__main__":
         "-p:p",
         "--peak-probability",
         help=f"The probability of a trade initiating a peak, a peak will alter the offset from the general point with an multiplier of 5. Expects a floating point value for peak probability, defaults to '{PEAK_PROBABILITY}"
-        "If a peak occurs then the probability of the next order being a peak or dip is increased by 30%",
+        "If a peak occurs then the probability of the next order being a peak or dip is increased by 30%%",
         type=float,
         default=PEAK_PROBABILITY,
     )
@@ -285,7 +287,7 @@ if __name__ == "__main__":
         "-d:p",
         "--dip-probability",
         help=f"The probability of a trade initiating a dip, a dip will alter the offset from the general point with an multiplier of -5. Expects a floating point value for dip probability, defaults to '{DIP_PROBABILITY}'"
-        "If a dip occurs then the probability of the next order being a peak or dip is increased by 30%",
+        "If a dip occurs then the probability of the next order being a peak or dip is increased by 30%%",
         type=float,
         default=DIP_PROBABILITY,
     )

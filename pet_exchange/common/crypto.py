@@ -14,10 +14,10 @@ BFV_PARAMETERS = {"p": 65537, "n": 4096, "sec": 128}
 # qs - coefficient modulus sizes - used by SEAL to generate a list of primes of those binary sizes, size of ciphertext elements, length of list indicates the multiplicative depth (level) of the scheme, bigger is worse (security)
 # scale - scaling factor - defines encoding precision for the binary representation of coefficients, bigger is better (precision), bigger is worse (performance?)`
 CKKS_PARAMETERS = {
-    "n": 2 ** 14,
+    "n": 2**14,
     "qs": [42] + [32] * 6,
     # "qs": [24] + [23] * 18,
-    "scale": 2 ** 32,
+    "scale": 2**32,
 }
 
 # Max qs for 2 ** 14 is 438
@@ -195,7 +195,9 @@ class BFV:
             list(
                 self._pyfhel.decodeInt(
                     self._pyfhel.decrypt(
-                        PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel) if isinstance(ciphertext, bytes) else ciphertext
+                        PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel)
+                        if isinstance(ciphertext, bytes)
+                        else ciphertext
                     )
                 )
             )
@@ -207,7 +209,9 @@ class CKKS:
         self._pyfhel = pyfhel
         self._depth_map = {}
 
-    def mod_switch_until(self, first: Union[PyPtxt, PyCtxt], second: Union[PyPtxt, PyCtxt]) -> None:
+    def mod_switch_until(
+        self, first: Union[PyPtxt, PyCtxt], second: Union[PyPtxt, PyCtxt]
+    ) -> None:
         _first = self._depth_map[hash(first)]
         _second = self._depth_map[hash(second)]
         if _first < _second:
@@ -262,7 +266,13 @@ class CKKS:
         scale: float = 0.0,
         scale_bits: int = 0,
     ) -> bytes:
-        ctxt = PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel) if isinstance(ciphertext, bytes) else ciphertext
+        if isinstance(ciphertext, bytes):
+            ctxt = PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel)
+            if hash(ctxt) not in self._depth_map:
+                self._depth_map[hash(ctxt)] = self._depth_map[hash(ciphertext)]
+        else:
+            ctxt = ciphertext
+
         ptxt = self.encode_float(values=[value]) if isinstance(value, float) else value
 
         self.mod_switch_until(first=ctxt, second=ptxt)
@@ -285,8 +295,19 @@ class CKKS:
         to_bytes: bool = True,
         new_ctxt: bool = True,
     ) -> bytes:
-        ctxt = PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel) if isinstance(ciphertext, bytes) else ciphertext
-        ctxt_other = PyCtxt(serialized=value, pyfhel=self._pyfhel) if isinstance(value, bytes) else value
+        if isinstance(ciphertext, bytes):
+            ctxt = PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel)
+            if hash(ctxt) not in self._depth_map:
+                self._depth_map[hash(ctxt)] = self._depth_map[hash(ciphertext)]
+        else:
+            ctxt = ciphertext
+
+        if isinstance(value, bytes):
+            ctxt_other = PyCtxt(serialized=value, pyfhel=self._pyfhel)
+            if hash(ctxt_other) not in self._depth_map:
+                self._depth_map[hash(ctxt_other)] = self._depth_map[hash(value)]
+        else:
+            ctxt_other = value
 
         self.mod_switch_until(first=ctxt, second=ctxt_other)
         _ctxt_r = self._pyfhel.add(
@@ -306,9 +327,19 @@ class CKKS:
         )
 
     def encrypt_sub_plain_float(
-        self, ciphertext: bytes, value: float, to_bytes: bool = True, new_ctxt: bool = True
+        self,
+        ciphertext: bytes,
+        value: float,
+        to_bytes: bool = True,
+        new_ctxt: bool = True,
     ) -> bytes:
-        ctxt = PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel) if isinstance(ciphertext, bytes) else ciphertext
+        if isinstance(ciphertext, bytes):
+            ctxt = PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel)
+            if hash(ctxt) not in self._depth_map:
+                self._depth_map[hash(ctxt)] = self._depth_map[hash(ciphertext)]
+        else:
+            ctxt = ciphertext
+
         ptxt = self.encode_float(values=[value]) if isinstance(value, float) else value
 
         self.mod_switch_until(first=ctxt, second=ptxt)
@@ -331,8 +362,19 @@ class CKKS:
         to_bytes: bool = True,
         new_ctxt: bool = True,
     ) -> bytes:
-        ctxt = PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel) if isinstance(ciphertext, bytes) else ciphertext
-        ctxt_other = PyCtxt(serialized=value, pyfhel=self._pyfhel) if isinstance(value, bytes) else value
+        if isinstance(ciphertext, bytes):
+            ctxt = PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel)
+            if hash(ctxt) not in self._depth_map:
+                self._depth_map[hash(ctxt)] = self._depth_map[hash(ciphertext)]
+        else:
+            ctxt = ciphertext
+
+        if isinstance(value, bytes):
+            ctxt_other = PyCtxt(serialized=value, pyfhel=self._pyfhel)
+            if hash(ctxt_other) not in self._depth_map:
+                self._depth_map[hash(ctxt_other)] = self._depth_map[hash(value)]
+        else:
+            ctxt_other = value
 
         self.mod_switch_until(first=ctxt, second=ctxt_other)
         _ctxt_r = self._pyfhel.sub(
@@ -356,7 +398,13 @@ class CKKS:
         scale: float = 0.0,
         scale_bits: int = 0,
     ) -> bytes:
-        ctxt = PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel) if isinstance(ciphertext, bytes) else ciphertext
+        if isinstance(ciphertext, bytes):
+            ctxt = PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel)
+            if hash(ctxt) not in self._depth_map:
+                self._depth_map[hash(ctxt)] = self._depth_map[hash(ciphertext)]
+        else:
+            ctxt = ciphertext
+
         ptxt = self.encode_float(values=[value]) if isinstance(value, float) else value
 
         self.mod_switch_until(first=ctxt, second=ptxt)
@@ -383,8 +431,19 @@ class CKKS:
         to_bytes: bool = True,
         new_ctxt: bool = True,
     ) -> bytes:
-        ctxt = PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel) if isinstance(ciphertext, bytes) else ciphertext
-        ctxt_other = PyCtxt(serialized=value, pyfhel=self._pyfhel) if isinstance(value, bytes) else value
+        if isinstance(ciphertext, bytes):
+            ctxt = PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel)
+            if hash(ctxt) not in self._depth_map:
+                self._depth_map[hash(ctxt)] = self._depth_map[hash(ciphertext)]
+        else:
+            ctxt = ciphertext
+
+        if isinstance(value, bytes):
+            ctxt_other = PyCtxt(serialized=value, pyfhel=self._pyfhel)
+            if hash(ctxt_other) not in self._depth_map:
+                self._depth_map[hash(ctxt_other)] = self._depth_map[hash(value)]
+        else:
+            ctxt_other = value
 
         self.mod_switch_until(first=ctxt, second=ctxt_other)
         _ctxt_r = self._pyfhel.multiply(
@@ -403,7 +462,13 @@ class CKKS:
     def encrypt_square(
         self, ciphertext: bytes, to_bytes: bool = True, new_ctxt: bool = True
     ) -> bytes:
-        ctxt = PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel) if isinstance(ciphertext, bytes) else ciphertext
+        if isinstance(ciphertext, bytes):
+            ctxt = PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel)
+            if hash(ctxt) not in self._depth_map:
+                self._depth_map[hash(ctxt)] = self._depth_map[hash(ciphertext)]
+        else:
+            ctxt = ciphertext
+
         _ctxt_r = self._pyfhel.square(
             ctxt=ctxt,
             in_new_ctxt=new_ctxt,
@@ -424,7 +489,13 @@ class CKKS:
     ) -> bytes:
         # Pyfhel does not natively support power of operations on CKKS
         # This operation is probably very costly in terms of noise and performance
-        _ctxt = PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel) if isinstance(ciphertext, bytes) else ciphertext
+        if isinstance(ciphertext, bytes):
+            _ctxt = PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel)
+            if hash(_ctxt) not in self._depth_map:
+                self._depth_map[hash(_ctxt)] = self._depth_map[hash(ciphertext)]
+        else:
+            _ctxt = ciphertext
+
         for _ in range(value):
             self._pyfhel.multiply(
                 ctxt=_ctxt,
@@ -454,5 +525,9 @@ class CKKS:
 
     def decrypt_float(self, ciphertext: bytes) -> float:
         return max(
-            self._pyfhel.decryptFrac(PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel) if isinstance(ciphertext, bytes) else ciphertext)
+            self._pyfhel.decryptFrac(
+                PyCtxt(serialized=ciphertext, pyfhel=self._pyfhel)
+                if isinstance(ciphertext, bytes)
+                else ciphertext
+            )
         )

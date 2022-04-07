@@ -50,6 +50,20 @@ service IntermediateProto {
     //
     // If it fails to decrypt or compare then a suitable status code is returned
     rpc GetMinimumValueFloat (GetMinimumValueRequest) returns (GetMinimumValueReply);
+
+    // Request to compare two plaintexts of floating point value and return the plaintext of the one with the minimum value
+    //
+    // Returns the plaintext of the minimum value
+    //
+    // If it fails to compare then a suitable status code is returned
+    rpc GetMinimumValuePlainInt (GetMinimumValuePlainRequest) returns (GetMinimumValuePlainReply);
+
+    // Request to compare two plaintexts of integer value and return the plaintext of the one with the minimum value
+    //
+    // Returns the plaintext of the minimum value
+    //
+    // If it fails to compare then a suitable status code is returned
+    rpc GetMinimumValuePlainFloat (GetMinimumValuePlainRequest) returns (GetMinimumValuePlainReply);
 }
 
 // OrderType
@@ -158,9 +172,30 @@ message GetMinimumValueRequest {
 }
 
 message ChallengeResult {
-    bytes minimum = 1; // TODO: This could be a bool or something instead to lower overhead
+    bool minimum = 1; // TODO: This could be a bool or something instead to lower overhead
 }
 
 message GetMinimumValueReply {
    repeated ChallengeResult challenges = 1;
+}
+
+// GetMinimumValuePlainRequest
+//
+// Compares and gets the minimum of a number of items and sends back
+message ChallengePlain {
+    float first = 1;
+    float second = 2;
+}
+
+message GetMinimumValuePlainRequest {
+    repeated ChallengePlain challenges = 1;
+    string instrument = 2;
+}
+
+message ChallengePlainResult {
+    bool minimum = 1; // TODO: This could be a bool or something instead to lower overhead
+}
+
+message GetMinimumValuePlainReply {
+   repeated ChallengePlainResult challenges = 1;
 }

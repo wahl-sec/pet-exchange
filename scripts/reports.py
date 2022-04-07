@@ -931,14 +931,88 @@ def create_report(
                 ).total_seconds()
             )
 
-        time_sorted_bid: List[float] = []
-        time_sorted_ask: List[float] = []
-        for category, sections in all_metrics_executed.items():
-            for section_struct in sections["pairs"]:
-                if section_struct["type"] == "bid":
-                    time_sorted_bid.extend(section_struct["timings"])
-                else:
-                    time_sorted_ask.extend(section_struct["timings"])
+        time_sort_bid: List[float] = []
+        time_sort_ask: List[float] = []
+        time_sort_orders_bid: List[float] = []
+        time_sort_orders_ask: List[float] = []
+        time_match_orders: List[float] = []
+        time_decrypt_orders: List[float] = []
+        time_generate_challenges: List[float] = []
+        time_get_minimum_price: List[float] = []
+        time_get_minimum_volume: List[float] = []
+        time_pad_orders_price_bid: List[float] = []
+        time_pad_orders_price_ask: List[float] = []
+        time_unpad_orders_price_bid: List[float] = []
+        time_unpad_orders_price_ask: List[float] = []
+        time_pad_orders_volume_bid: List[float] = []
+        time_pad_orders_volume_ask: List[float] = []
+        time_unpad_orders_volume_bid: List[float] = []
+        time_unpad_orders_volume_ask: List[float] = []
+        time_unpad_orders_volume_minimum: List[float] = []
+        size_orders: List[float] = []
+        size_challenges: List[float] = []
+        for category_name, category_struct in all_metrics_executed.items():
+            for section_name, section_struct in category_struct.items():
+                if category_name == "sorting":
+                    if section_name == "pairs":
+                        _bid_list = time_sort_bid
+                        _ask_list = time_sort_ask
+                    elif section_name == "orders":
+                        _bid_list = time_sort_orders_bid
+                        _ask_list = time_sort_orders_ask
+                elif category_name == "match":
+                    if section_name == "pairs":
+                        _bid_list = time_match_orders
+                elif category_name == "decrypt":
+                    if section_name == "order":
+                        _bid_list = time_decrypt_orders
+                elif category_name == "challenges":
+                    if section_name == "generate":
+                        _bid_list = time_generate_challenges
+                elif category_name == "minimum":
+                    if section_name == "price":
+                        _bid_list = time_get_minimum_price
+                    elif section_name == "volume":
+                        _bid_list = time_get_minimum_volume
+                elif category_name == "pad":
+                    if section_name == "price":
+                        _bid_list = time_pad_orders_price_bid
+                        _ask_list = time_pad_orders_price_ask
+                    elif section_name == "volume":
+                        _bid_list = time_pad_orders_volume_bid
+                        _ask_list = time_pad_orders_volume_ask
+                elif category_name == "unpad":
+                    if section_name == "price":
+                        _bid_list = time_unpad_orders_price_bid
+                        _ask_list = time_unpad_orders_price_ask
+                    elif section_name == "volume":
+                        _bid_list = time_unpad_orders_volume_bid
+                        _ask_list = time_unpad_orders_volume_ask
+                    elif section_name == "minimum":
+                        _bid_list = time_unpad_orders_volume_minimum
+                elif category_name == "size":
+                    if section_name == "order":
+                        _bid_list = size_orders
+                    elif section_name == "challenge":
+                        _bid_list = size_challenges
+
+                for section_struct_value in section_struct:
+                    if "timings" in section_struct_value:
+                        if "type" in section_struct_value:
+                            if section_struct_value["type"] == "bid":
+                                _bid_list.extend(section_struct_value["timings"])
+                            else:
+                                _ask_list.extend(section_struct_value["timings"])
+                        else:
+                            _bid_list.extend(section_struct_value["timings"])
+                    elif "sizes" in section_struct_value:
+                        if "type" in section_struct_value:
+                            if section_struct_value["type"] == "bid":
+                                _bid_list.extend(section_struct_value["sizes"])
+                            else:
+                                _ask_list.extend(section_struct_value["sizes"])
+                        else:
+                            _bid_list.extend(section_struct_value["sizes"])
 
         struct["METRICS"] = METRICS_STRUCTURE.copy()
         struct["METRICS"].update(
@@ -953,57 +1027,59 @@ def create_report(
                 "TOTAL_ORDERS_EXECUTED": len(all_orders_executed),
                 "FIRST_ORDER_SUBMITTED_DATE": first_submitted_date,
                 "LAST_ORDER_SUBMITTED_DATE": last_submitted_date,
-                "MAX_TIME_TO_COMPLETION": max(
-                    time_completion_bid + time_completion_ask
-                ),
-                "MAX_TIME_TO_COMPLETION_BID": max(time_completion_bid),
-                "MAX_TIME_TO_COMPLETION_ASK": max(time_completion_ask),
-                "MIN_TIME_TO_COMPLETION": min(
-                    time_completion_bid + time_completion_ask
-                ),
-                "MIN_TIME_TO_COMPLETION_BID": min(time_completion_bid),
-                "MIN_TIME_TO_COMPLETION_ASK": min(time_completion_ask),
+                "MAX_TIME_TO_COMPLETION": max(time_completion_bid + time_completion_ask)
+                if time_completion_bid or time_completion_ask
+                else None,
+                "MAX_TIME_TO_COMPLETION_BID": max(time_completion_bid)
+                if time_completion_bid
+                else None,
+                "MAX_TIME_TO_COMPLETION_ASK": max(time_completion_ask)
+                if time_completion_ask
+                else None,
+                "MIN_TIME_TO_COMPLETION": min(time_completion_bid + time_completion_ask)
+                if time_completion_bid or time_completion_ask
+                else None,
+                "MIN_TIME_TO_COMPLETION_BID": min(time_completion_bid)
+                if time_completion_bid
+                else None,
+                "MIN_TIME_TO_COMPLETION_ASK": min(time_completion_ask)
+                if time_completion_ask
+                else None,
                 "AVERAGE_TIME_TO_COMPLETION": sum(
                     time_completion_bid + time_completion_ask
                 )
-                / (len(time_completion_ask) + len(time_completion_bid)),
+                / (len(time_completion_ask) + len(time_completion_bid))
+                if time_completion_bid or time_completion_ask
+                else None,
                 "AVERAGE_TIME_TO_COMPLETION_BID": sum(time_completion_bid)
-                / len(time_completion_bid),
+                / len(time_completion_bid)
+                if time_completion_bid
+                else None,
                 "AVERAGE_TIME_TO_COMPLETION_ASK": sum(time_completion_ask)
-                / len(time_completion_ask),
-                "MAX_TIME_TO_SORT": max(time_sorted_bid + time_sorted_ask)
-                if time_sorted_bid or time_sorted_ask
+                / len(time_completion_ask)
+                if time_completion_ask
                 else None,
-                "MAX_TIME_TO_SORT_BID": max(time_sorted_bid)
-                if time_sorted_bid
+                "MAX_TIME_TO_SORT": max(time_sort_bid + time_sort_ask)
+                if time_sort_bid or time_sort_ask
                 else None,
-                "MAX_TIME_TO_SORT_ASK": max(time_sorted_ask)
-                if time_sorted_ask
+                "MAX_TIME_TO_SORT_BID": max(time_sort_bid) if time_sort_bid else None,
+                "MAX_TIME_TO_SORT_ASK": max(time_sort_ask) if time_sort_ask else None,
+                "MIN_TIME_TO_SORT": min(time_sort_bid + time_sort_ask)
+                if time_sort_bid or time_sort_ask
                 else None,
-                "MIN_TIME_TO_SORT": min(time_sorted_bid + time_sorted_ask)
-                if time_sorted_bid or time_sorted_ask
-                else None,
-                "MIN_TIME_TO_SORT_BID": min(time_sorted_bid)
-                if time_sorted_bid
-                else None,
-                "MIN_TIME_TO_SORT_ASK": min(time_sorted_ask)
-                if time_sorted_ask
-                else None,
+                "MIN_TIME_TO_SORT_BID": min(time_sort_bid) if time_sort_bid else None,
+                "MIN_TIME_TO_SORT_ASK": min(time_sort_ask) if time_sort_ask else None,
                 "AVERAGE_TIME_TO_SORT": (
-                    sum(time_sorted_bid + time_sorted_ask)
-                    / (len(time_sorted_bid) + len(time_sorted_ask))
+                    sum(time_sort_bid + time_sort_ask)
+                    / (len(time_sort_bid) + len(time_sort_ask))
                 )
-                if time_sorted_bid or time_sorted_ask
+                if time_sort_bid or time_sort_ask
                 else None,
-                "AVERAGE_TIME_TO_SORT_BID": (
-                    sum(time_sorted_bid) / len(time_sorted_bid)
-                )
-                if time_sorted_bid
+                "AVERAGE_TIME_TO_SORT_BID": (sum(time_sort_bid) / len(time_sort_bid))
+                if time_sort_bid
                 else None,
-                "AVERAGE_TIME_TO_SORT_ASK": (
-                    sum(time_sorted_ask) / len(time_sorted_ask)
-                )
-                if time_sorted_ask
+                "AVERAGE_TIME_TO_SORT_ASK": (sum(time_sort_ask) / len(time_sort_ask))
+                if time_sort_ask
                 else None,
                 "TOTAL_VOLUME_SUBMITTED": sum(
                     [_order["volume"] for _order in all_orders.values()]
@@ -1040,20 +1116,30 @@ def create_report(
                         if _order["type"] == "BID"
                     ]
                 ),
-                "AVERAGE_VOLUME_SUBMITTED_ASK": sum(
+                "AVERAGE_VOLUME_SUBMITTED_ASK": (
+                    sum(
+                        [
+                            _order["volume"]
+                            for _order in all_orders.values()
+                            if _order["type"] == "ASK"
+                        ]
+                    )
+                    / len(
+                        [
+                            _order["volume"]
+                            for _order in all_orders.values()
+                            if _order["type"] == "ASK"
+                        ]
+                    )
+                )
+                if len(
                     [
                         _order["volume"]
                         for _order in all_orders.values()
                         if _order["type"] == "ASK"
                     ]
                 )
-                / len(
-                    [
-                        _order["volume"]
-                        for _order in all_orders.values()
-                        if _order["type"] == "ASK"
-                    ]
-                ),
+                else None,
                 "TOTAL_PRICE_SUBMITTED": sum(
                     [_order["price"] for _order in all_orders.values()]
                 ),
@@ -1075,88 +1161,387 @@ def create_report(
                     [_order["price"] for _order in all_orders.values()]
                 )
                 / len([_order["price"] for _order in all_orders.values()]),
-                "AVERAGE_PRICE_SUBMITTED_BID": sum(
+                "AVERAGE_PRICE_SUBMITTED_BID": (
+                    sum(
+                        [
+                            _order["price"]
+                            for _order in all_orders.values()
+                            if _order["type"] == "BID"
+                        ]
+                    )
+                    / len(
+                        [
+                            _order["price"]
+                            for _order in all_orders.values()
+                            if _order["type"] == "BID"
+                        ]
+                    )
+                )
+                if len(
                     [
                         _order["price"]
                         for _order in all_orders.values()
                         if _order["type"] == "BID"
                     ]
                 )
-                / len(
-                    [
-                        _order["price"]
-                        for _order in all_orders.values()
-                        if _order["type"] == "BID"
-                    ]
-                ),
-                "AVERAGE_PRICE_SUBMITTED_ASK": sum(
+                else None,
+                "AVERAGE_PRICE_SUBMITTED_ASK": (
+                    sum(
+                        [
+                            _order["price"]
+                            for _order in all_orders.values()
+                            if _order["type"] == "ASK"
+                        ]
+                    )
+                    / len(
+                        [
+                            _order["price"]
+                            for _order in all_orders.values()
+                            if _order["type"] == "ASK"
+                        ]
+                    )
+                )
+                if len(
                     [
                         _order["price"]
                         for _order in all_orders.values()
                         if _order["type"] == "ASK"
                     ]
                 )
-                / len(
-                    [
-                        _order["price"]
-                        for _order in all_orders.values()
-                        if _order["type"] == "ASK"
-                    ]
-                ),
+                else None,
                 "TOTAL_VOLUME_EXECUTED": sum(
                     [
                         _order["performed"]["volume"]
                         for _order in all_orders_executed.values()
                     ]
                 ),
-                "AVERAGE_VOLUME_EXECUTED": sum(
+                "AVERAGE_VOLUME_EXECUTED": (
+                    sum(
+                        [
+                            _order["performed"]["volume"]
+                            for _order in all_orders_executed.values()
+                        ]
+                    )
+                    / len(
+                        [
+                            _order["performed"]["volume"]
+                            for _order in all_orders_executed.values()
+                        ]
+                    )
+                )
+                if len(
                     [
                         _order["performed"]["volume"]
                         for _order in all_orders_executed.values()
                     ]
                 )
-                / len(
-                    [
-                        _order["performed"]["volume"]
-                        for _order in all_orders_executed.values()
-                    ]
-                ),
+                else None,
                 "TOTAL_PRICE_EXECUTED": sum(
                     [
                         _order["performed"]["price"] * _order["performed"]["volume"]
                         for _order in all_orders_executed.values()
                     ]
                 ),
-                "AVERAGE_PRICE_EXECUTED": sum(
-                    [
-                        _order["performed"]["price"] * _order["performed"]["volume"]
-                        for _order in all_orders_executed.values()
-                    ]
+                "AVERAGE_PRICE_EXECUTED": (
+                    sum(
+                        [
+                            _order["performed"]["price"] * _order["performed"]["volume"]
+                            for _order in all_orders_executed.values()
+                        ]
+                    )
+                    / len(
+                        [
+                            _order["performed"]["price"]
+                            for _order in all_orders_executed.values()
+                        ]
+                    )
                 )
-                / len(
+                if len(
                     [
                         _order["performed"]["price"]
                         for _order in all_orders_executed.values()
                     ]
-                ),
+                )
+                else None,
                 "TOTAL_PRICE_PER_EXECUTED": sum(
                     [
                         _order["performed"]["price"]
                         for _order in all_orders_executed.values()
                     ]
                 ),
-                "AVERAGE_PRICE_PER_EXECUTED": sum(
+                "AVERAGE_PRICE_PER_EXECUTED": (
+                    sum(
+                        [
+                            _order["performed"]["price"]
+                            for _order in all_orders_executed.values()
+                        ]
+                    )
+                    / len(
+                        [
+                            _order["performed"]["price"]
+                            for _order in all_orders_executed.values()
+                        ]
+                    )
+                )
+                if len(
                     [
                         _order["performed"]["price"]
                         for _order in all_orders_executed.values()
                     ]
                 )
-                / len(
-                    [
-                        _order["performed"]["price"]
-                        for _order in all_orders_executed.values()
-                    ]
-                ),
+                else None,
+                "MAX_TIME_TO_MATCH_ORDER": max(time_match_orders)
+                if time_match_orders
+                else None,
+                "MIN_TIME_TO_MATCH_ORDER": min(time_match_orders)
+                if time_match_orders
+                else None,
+                "AVERAGE_TIME_TO_MATCH_ORDER": (
+                    sum(time_match_orders) / (len(time_match_orders))
+                )
+                if time_match_orders
+                else None,
+                "MAX_TIME_TO_DECRYPT_ORDER": max(time_decrypt_orders)
+                if time_decrypt_orders
+                else None,
+                "MIN_TIME_TO_DECRYPT_ORDER": min(time_decrypt_orders)
+                if time_decrypt_orders
+                else None,
+                "AVERAGE_TIME_TO_DECRYPT_ORDER": (
+                    sum(time_decrypt_orders) / (len(time_decrypt_orders))
+                )
+                if time_decrypt_orders
+                else None,
+                "MAX_TIME_TO_GENERATE_CHALLENGES": max(time_generate_challenges)
+                if time_generate_challenges
+                else None,
+                "MIN_TIME_TO_GENERATE_CHALLENGES": min(time_generate_challenges)
+                if time_generate_challenges
+                else None,
+                "AVERAGE_TIME_TO_GENERATE_CHALLENGES": (
+                    sum(time_generate_challenges) / (len(time_generate_challenges))
+                )
+                if time_generate_challenges
+                else None,
+                "MAX_TIME_TO_GET_MINIMUM_PRICE": max(time_get_minimum_price)
+                if time_get_minimum_price
+                else None,
+                "MIN_TIME_TO_GET_MINIMUM_PRICE": min(time_get_minimum_price)
+                if time_get_minimum_price
+                else None,
+                "AVERAGE_TIME_TO_GET_MINIMUM_PRICE": (
+                    sum(time_get_minimum_price) / (len(time_get_minimum_price))
+                )
+                if time_get_minimum_price
+                else None,
+                "MAX_TIME_TO_GET_MINIMUM_VOLUME": max(time_get_minimum_volume)
+                if time_get_minimum_volume
+                else None,
+                "MIN_TIME_TO_GET_MINIMUM_VOLUME": min(time_get_minimum_volume)
+                if time_get_minimum_volume
+                else None,
+                "AVERAGE_TIME_TO_GET_MINIMUM_VOLUME": (
+                    sum(time_get_minimum_volume) / (len(time_get_minimum_volume))
+                )
+                if time_get_minimum_volume
+                else None,
+                "MAX_TIME_TO_PAD_ORDERS_PRICE": max(
+                    time_pad_orders_price_ask + time_pad_orders_price_bid
+                )
+                if time_pad_orders_price_bid or time_pad_orders_price_ask
+                else None,
+                "MIN_TIME_TO_PAD_ORDERS_PRICE": min(
+                    time_pad_orders_price_ask + time_pad_orders_price_bid
+                )
+                if time_pad_orders_price_bid or time_pad_orders_price_ask
+                else None,
+                "AVERAGE_TIME_TO_PAD_ORDERS_PRICE": (
+                    sum(time_pad_orders_price_bid + time_pad_orders_price_ask)
+                    / (len(time_pad_orders_price_bid) + len(time_pad_orders_price_ask))
+                )
+                if time_pad_orders_price_bid or time_pad_orders_price_ask
+                else None,
+                "MAX_TIME_TO_PAD_ORDERS_PRICE_BID": max(time_pad_orders_price_bid)
+                if time_pad_orders_price_bid
+                else None,
+                "MIN_TIME_TO_PAD_ORDERS_PRICE_BID": min(time_pad_orders_price_bid)
+                if time_pad_orders_price_bid
+                else None,
+                "AVERAGE_TIME_TO_PAD_ORDERS_PRICE_BID": (
+                    sum(time_pad_orders_price_bid) / (len(time_pad_orders_price_bid))
+                )
+                if time_pad_orders_price_bid
+                else None,
+                "MAX_TIME_TO_PAD_ORDERS_PRICE_ASK": max(time_pad_orders_price_ask)
+                if time_pad_orders_price_ask
+                else None,
+                "MIN_TIME_TO_PAD_ORDERS_PRICE_ASK": min(time_pad_orders_price_ask)
+                if time_pad_orders_price_ask
+                else None,
+                "AVERAGE_TIME_TO_PAD_ORDERS_PRICE_ASK": (
+                    sum(time_pad_orders_price_ask) / (len(time_pad_orders_price_ask))
+                )
+                if time_pad_orders_price_ask
+                else None,
+                "MAX_TIME_TO_UNPAD_ORDERS_PRICE": max(
+                    time_unpad_orders_price_ask + time_unpad_orders_price_bid
+                )
+                if time_unpad_orders_price_bid or time_unpad_orders_price_ask
+                else None,
+                "MIN_TIME_TO_UNPAD_ORDERS_PRICE": min(
+                    time_unpad_orders_price_ask + time_unpad_orders_price_bid
+                )
+                if time_unpad_orders_price_bid or time_unpad_orders_price_ask
+                else None,
+                "AVERAGE_TIME_TO_UNPAD_ORDERS_PRICE": (
+                    sum(time_unpad_orders_price_bid + time_unpad_orders_price_ask)
+                    / (
+                        len(time_unpad_orders_price_bid)
+                        + len(time_unpad_orders_price_ask)
+                    )
+                )
+                if time_unpad_orders_price_bid or time_unpad_orders_price_ask
+                else None,
+                "MAX_TIME_TO_UNPAD_ORDERS_PRICE_BID": max(time_unpad_orders_price_bid)
+                if time_unpad_orders_price_bid
+                else None,
+                "MIN_TIME_TO_UNPAD_ORDERS_PRICE_BID": min(time_unpad_orders_price_bid)
+                if time_unpad_orders_price_bid
+                else None,
+                "AVERAGE_TIME_TO_UNPAD_ORDERS_PRICE_BID": (
+                    sum(time_unpad_orders_price_bid)
+                    / (len(time_unpad_orders_price_bid))
+                )
+                if time_unpad_orders_price_bid
+                else None,
+                "MAX_TIME_TO_UNPAD_ORDERS_PRICE_ASK": max(time_unpad_orders_price_ask)
+                if time_unpad_orders_price_ask
+                else None,
+                "MIN_TIME_TO_UNPAD_ORDERS_PRICE_ASK": min(time_unpad_orders_price_ask)
+                if time_unpad_orders_price_ask
+                else None,
+                "AVERAGE_TIME_TO_UNPAD_ORDERS_PRICE_ASK": (
+                    sum(time_unpad_orders_price_ask)
+                    / (len(time_unpad_orders_price_ask))
+                )
+                if time_unpad_orders_price_ask
+                else None,
+                "MAX_TIME_TO_PAD_ORDERS_VOLUME": max(
+                    time_pad_orders_volume_ask + time_pad_orders_volume_bid
+                )
+                if time_pad_orders_volume_bid or time_pad_orders_volume_ask
+                else None,
+                "MIN_TIME_TO_PAD_ORDERS_VOLUME": min(
+                    time_pad_orders_volume_ask + time_pad_orders_volume_bid
+                )
+                if time_pad_orders_volume_bid or time_pad_orders_volume_ask
+                else None,
+                "AVERAGE_TIME_TO_PAD_ORDERS_VOLUME": (
+                    sum(time_pad_orders_volume_bid + time_pad_orders_volume_ask)
+                    / (
+                        len(time_pad_orders_volume_bid)
+                        + len(time_pad_orders_volume_ask)
+                    )
+                )
+                if time_pad_orders_volume_bid or time_pad_orders_volume_ask
+                else None,
+                "MAX_TIME_TO_PAD_ORDERS_VOLUME_BID": max(time_pad_orders_volume_bid)
+                if time_pad_orders_volume_bid
+                else None,
+                "MIN_TIME_TO_PAD_ORDERS_VOLUME_BID": min(time_pad_orders_volume_bid)
+                if time_pad_orders_volume_bid
+                else None,
+                "AVERAGE_TIME_TO_PAD_ORDERS_VOLUME_BID": (
+                    sum(time_pad_orders_volume_bid) / (len(time_pad_orders_volume_bid))
+                )
+                if time_pad_orders_volume_bid
+                else None,
+                "MAX_TIME_TO_PAD_ORDERS_VOLUME_ASK": max(time_pad_orders_volume_ask)
+                if time_pad_orders_volume_ask
+                else None,
+                "MIN_TIME_TO_PAD_ORDERS_VOLUME_ASK": min(time_pad_orders_volume_ask)
+                if time_pad_orders_volume_ask
+                else None,
+                "AVERAGE_TIME_TO_PAD_ORDERS_VOLUME_ASK": (
+                    sum(time_pad_orders_volume_ask) / (len(time_pad_orders_volume_ask))
+                )
+                if time_pad_orders_volume_ask
+                else None,
+                "MAX_TIME_TO_UNPAD_ORDERS_VOLUME": max(
+                    time_unpad_orders_volume_ask + time_unpad_orders_volume_bid
+                )
+                if time_unpad_orders_volume_bid or time_unpad_orders_volume_ask
+                else None,
+                "MIN_TIME_TO_UNPAD_ORDERS_VOLUME": min(
+                    time_unpad_orders_volume_ask + time_unpad_orders_volume_bid
+                )
+                if time_unpad_orders_volume_bid or time_unpad_orders_volume_ask
+                else None,
+                "AVERAGE_TIME_TO_UNPAD_ORDERS_VOLUME": (
+                    sum(time_unpad_orders_volume_bid + time_unpad_orders_volume_ask)
+                    / (
+                        len(time_unpad_orders_volume_bid)
+                        + len(time_unpad_orders_volume_ask)
+                    )
+                )
+                if time_unpad_orders_volume_bid or time_unpad_orders_volume_ask
+                else None,
+                "MAX_TIME_TO_UNPAD_ORDERS_VOLUME_BID": max(time_unpad_orders_volume_bid)
+                if time_unpad_orders_volume_bid
+                else None,
+                "MIN_TIME_TO_UNPAD_ORDERS_VOLUME_BID": min(time_unpad_orders_volume_bid)
+                if time_unpad_orders_volume_bid
+                else None,
+                "AVERAGE_TIME_TO_UNPAD_ORDERS_VOLUME_BID": (
+                    sum(time_unpad_orders_volume_bid)
+                    / (len(time_unpad_orders_volume_bid))
+                )
+                if time_unpad_orders_volume_bid
+                else None,
+                "MAX_TIME_TO_UNPAD_ORDERS_VOLUME_ASK": max(time_unpad_orders_volume_ask)
+                if time_unpad_orders_volume_ask
+                else None,
+                "MIN_TIME_TO_UNPAD_ORDERS_VOLUME_ASK": min(time_unpad_orders_volume_ask)
+                if time_unpad_orders_volume_ask
+                else None,
+                "AVERAGE_TIME_TO_UNPAD_ORDERS_VOLUME_ASK": (
+                    sum(time_unpad_orders_volume_ask)
+                    / (len(time_unpad_orders_volume_ask))
+                )
+                if time_unpad_orders_volume_ask
+                else None,
+                "MAX_TIME_TO_UNPAD_ORDERS_VOLUME_MINIMUM": max(
+                    time_unpad_orders_volume_minimum
+                )
+                if time_unpad_orders_volume_minimum
+                else None,
+                "MIN_TIME_TO_UNPAD_ORDERS_VOLUME_MINIMUM": min(
+                    time_unpad_orders_volume_minimum
+                )
+                if time_unpad_orders_volume_minimum
+                else None,
+                "AVERAGE_TIME_TO_UNPAD_ORDERS_VOLUME_MINIMUM": (
+                    sum(time_unpad_orders_volume_minimum)
+                    / (len(time_unpad_orders_volume_minimum))
+                )
+                if time_unpad_orders_volume_minimum
+                else None,
+                "MAX_SIZE_ORDERS": max(size_orders) if size_orders else None,
+                "MIN_SIZE_ORDERS": min(size_orders) if size_orders else None,
+                "AVERAGE_SIZE_ORDERS": (sum(size_orders) / (len(size_orders)))
+                if size_orders
+                else None,
+                "MAX_SIZE_CHALLENGES": max(size_challenges)
+                if size_challenges
+                else None,
+                "MIN_SIZE_CHALLENGES": min(size_challenges)
+                if size_challenges
+                else None,
+                "AVERAGE_SIZE_CHALLENGES": (
+                    sum(size_challenges) / (len(size_challenges))
+                )
+                if size_challenges
+                else None,
             }
         )
 

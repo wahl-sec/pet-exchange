@@ -50,10 +50,13 @@ SERVER_VARIABLES = {
         "exchange_compare_constant_count",
         "exchange_compare_sigmoid_iterations",
         "exchange_challenge_count",
+        "exchange_time_limit",
+        "exchange_delay_start",
     ],
     "intermediate": [
         "intermediate_host",
         "intermediate_port",
+        "intermediate_output",
         "exchange_host",
         "exchange_port",
         "plaintext",
@@ -78,25 +81,37 @@ def _determine_process_count(args: Namespace) -> int:
 
 def _start_server(parameters: Dict[str, Any]) -> NoReturn:
     name, kwargs = parameters
-    asyncio.run(
-        INIT_LOOKUP[name].serve(**kwargs),
-    )
+    try:
+        asyncio.run(
+            INIT_LOOKUP[name].serve(**kwargs),
+        )
+    except Exception as e:
+        logger.exception(
+            f"Main: Exchange '{name}' failed due to unexpected error: '{e}'"
+        )
 
 
 def _start_client(parameters: Dict[str, Any]) -> NoReturn:
     _name, _kwargs = parameters
     _start = time.time()
-    asyncio.run(
-        exchange_client.client(
-            exchange=(_kwargs["EXCHANGE_HOST"], _kwargs["EXCHANGE_PORT"]),
-            client=_name,
-            orders=_kwargs["ORDERS"],
-            encrypted=_kwargs["ENCRYPTED"],
-            client_output=_kwargs["CLIENT_OUTPUT"],
-            exchange_order_type=_kwargs["EXCHANGE_ORDER_TYPE"],
-            _start=None if not _kwargs["USE_OFFSET"] else _start,
+    try:
+        asyncio.run(
+            exchange_client.client(
+                exchange=(_kwargs["EXCHANGE_HOST"], _kwargs["EXCHANGE_PORT"]),
+                client=_name,
+                orders=_kwargs["ORDERS"],
+                encrypted=_kwargs["ENCRYPTED"],
+                client_output=_kwargs["CLIENT_OUTPUT"],
+                exchange_order_type=_kwargs["EXCHANGE_ORDER_TYPE"],
+                static_offset=_kwargs["CLIENT_STATIC_OFFSET"],
+                run_forever=_kwargs["CLIENT_RUN_FOREVER"],
+                _start=None if not _kwargs["USE_OFFSET"] else _start,
+            )
         )
-    )
+    except Exception as e:
+        logger.exception(
+            f"Main: Client '{_name}' failed due to unexpected error: '{e}'"
+        )
 
 
 def _resolve_client_information_files(args) -> Dict[str, Dict[str, Any]]:
@@ -124,6 +139,8 @@ def _resolve_client_information_files(args) -> Dict[str, Dict[str, Any]]:
                     "ENCRYPTED": None if args.plaintext else args.cryptographic,
                     "CLIENT_OUTPUT": args.client_output,
                     "USE_OFFSET": args.client_offset,
+                    "CLIENT_STATIC_OFFSET": args.client_static_offset,
+                    "CLIENT_RUN_FOREVER": args.client_run_forever,
                     "EXCHANGE_ORDER_TYPE": args.client_order_type
                     if args.client_order_type
                     else (
@@ -232,6 +249,10 @@ async def start(args: Namespace):
                         "exchange_challenge_count"
                     ]
                     del _servers[arg]["exchange_challenge_count"]
+                    _servers[arg]["time_limit"] = _servers[arg]["exchange_time_limit"]
+                    del _servers[arg]["exchange_time_limit"]
+                    _servers[arg]["delay_start"] = _servers[arg]["exchange_delay_start"]
+                    del _servers[arg]["exchange_delay_start"]
 
             pool.map(
                 _start_server,
@@ -346,6 +367,7 @@ if __name__ == "__main__":
         "-e:ccc",
         "--exchange-compare-constant-count",
         help="The constant count to use for the second compare function '2'",
+        type=int,
         choices=[3, 5, 9],
         default=3,
     )
@@ -353,7 +375,22 @@ if __name__ == "__main__":
         "-e:cc",
         "--exchange-challenge-count",
         help="Number of challenges to add to minimal value requests for the intermediate",
+        type=int,
         default=3,
+    )
+    exchange.add_argument(
+        "-e:tl",
+        "--exchange-time-limit",
+        help="Stop matching after a given number of seconds, useful for benchmarking volume matched over a given timeframe",
+        type=int,
+        default=None,
+    )
+    exchange.add_argument(
+        "-e:ds",
+        "--exchange-delay-start",
+        help="Delay start of matching so exchange is accepting orders but not matching until time limit is reached, useful for simulating pre-market open orders",
+        type=int,
+        default=None,
     )
 
     intermediate = parser.add_argument_group("Intermediate")
@@ -377,6 +414,13 @@ if __name__ == "__main__":
         type=int,
         default=50051,
     )
+    intermediate.add_argument(
+        "-i:o",
+        "--intermediate-output",
+        help="Path to the file where the output of the intermediate's metrics",
+        type=str,
+        default=None,
+    )
 
     client = parser.add_argument_group("Client")
     client.add_argument(
@@ -395,6 +439,19 @@ if __name__ == "__main__":
         choices=["LIMIT", "MARKET"],
         type=str,
         default=None,
+    )
+    client.add_argument(
+        "-c:so",
+        "--client-static-offset",
+        help="Static offset to apply after each processed order, helps reduce the amount of orders collected at the same time at the exchange, defaults to no static offset",
+        type=float,
+        default=None,
+    )
+    client.add_argument(
+        "-c:rf",
+        "--client-run-forever",
+        help="Run the client orders forever, will repeat from the beginning and continue to publish to the exchange, useful in combination with --exchange-time-limit",
+        action="store_true",
     )
     client.add_argument(
         "-c:o",

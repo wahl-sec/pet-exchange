@@ -44,6 +44,9 @@ class EncryptedOrderBook(OrderBook):
 
     def _sort_bid_encrypted(self, func: Callable):
         """Default sort of ciphertext bid orders."""
+        logger.warning(f"BID: {len(self._book_bid)}")
+
+
         self._book_bid = {
             k: v
             for k, v in sorted(
@@ -53,6 +56,7 @@ class EncryptedOrderBook(OrderBook):
 
     def _sort_ask_encrypted(self, func: Callable):
         """Default sort of ciphertext ask orders."""
+        logger.warning(f"ASK: {len(self._book_ask)}")
         self._book_ask = {
             k: v
             for k, v in sorted(

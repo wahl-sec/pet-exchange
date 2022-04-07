@@ -7,6 +7,7 @@ from pathlib import Path
 import logging
 import time
 import json
+import sys
 
 logger = logging.getLogger("__main__")
 
@@ -21,7 +22,12 @@ from pet_exchange.common.utils import MAX_GRPC_MESSAGE_LENGTH
 from pet_exchange.common.crypto import BFV_PARAMETERS, CKKS_PARAMETERS, BFV, CKKS
 
 
-def _write_output(output: str, client: str, orders: Dict[str, Any]) -> NoReturn:
+def _write_output(
+    output: str,
+    client: str,
+    orders: Dict[str, Dict[str, Any]],
+    metrics: Dict[str, List[float]],
+) -> NoReturn:
     """Writes the output of the current book for a certain instrument to a JSON file"""
     _path = Path(output)
     _book = {}
@@ -34,6 +40,11 @@ def _write_output(output: str, client: str, orders: Dict[str, Any]) -> NoReturn:
                     _book["CLIENTS"][client] = {}
 
                 _book["CLIENTS"][client].update(orders)
+
+                if client not in _book["METRICS"]:
+                    _book["METRICS"][client] = {}
+
+                _book["METRICS"][client].update(metrics)
 
         with _path.open(mode="w+") as _file:
             _file.write(json.dumps(_book))
@@ -51,17 +62,37 @@ async def client(
     client_output: str,
     exchange_order_type: ExchangeOrderType,
     _start: Optional[int] = None,
+    static_offset: Optional[float] = None,
+    run_forever: bool = False,
 ) -> NoReturn:
     host, port = exchange
     listen_addr = f"{host}:{port}"
     logger.info(f"Client '{client}': Starting ...")
     keys: Dict[str, Pyfhel] = {}
     placed_orders: Dict[str, Dict[str, Any]] = {}
+    metrics: Dict[str, List[float]] = {
+        "MAX_TIME_TO_GET_PUBLIC_KEY": None,
+        "MIN_TIME_TO_GET_PUBLIC_KEY": None,
+        "AVERAGE_TIME_TO_GET_PUBLIC_KEY": None,
+        "TIME_TO_GET_PUBLIC_KEY": [],
+        "MAX_TIME_TO_PROCESS_ORDER": None,
+        "MIN_TIME_TO_PROCESS_ORDER": None,
+        "AVERAGE_TIME_TO_PROCESS_ORDER": None,
+        "TIME_TO_PROCESS_ORDER": [],
+        "MAX_TIME_TO_SEND_ORDER": None,
+        "MIN_TIME_TO_SEND_ORDER": None,
+        "AVERAGE_TIME_TO_SEND_ORDER": None,
+        "TIME_TO_SEND_ORDER": [],
+        "AVERAGE_SIZE_OF_ORDER": None,
+        "MAX_SIZE_OF_ORDER": None,
+        "MIN_SIZE_OF_ORDER": None,
+        "SIZE_OF_ORDER": [],
+    }
 
     if client_output is not None:
         _path = Path(client_output)
         with _path.open(mode="w+") as _file:
-            _file.write(json.dumps({"CLIENTS": {}}))  # Clears the file
+            _file.write(json.dumps({"CLIENTS": {}, "METRICS": {}}))  # Clears the file
 
     # TODO: Fetch the public key and encrypt before sending to exchange, maybe we could implement a non-crypto exchange to benchmark against, just need to implement non-encrypted variants for all messages and check message type
     async with grpc.aio.insecure_channel(
@@ -127,110 +158,154 @@ async def client(
             )
         )
 
-        for order in orders:
-            _scheme_engine: Optional[Union[BFV, CKKS]] = None
+        while True:
+            for order in orders:
+                _scheme_engine: Optional[Union[BFV, CKKS]] = None
 
-            if encrypted is not None and order["instrument"] not in keys:
-                _key = await stub.GetPublicKey(
-                    grpc_buffer.GetPublicKeyRequest(
-                        instrument=order["instrument"], scheme=encrypted
+                if encrypted is not None and order["instrument"] not in keys:
+                    start_time = time.time()
+                    _key = await stub.GetPublicKey(
+                        grpc_buffer.GetPublicKeyRequest(
+                            instrument=order["instrument"], scheme=encrypted
+                        )
                     )
-                )
+                    end_time = time.time()
+                    metrics["TIME_TO_GET_PUBLIC_KEY"].append(end_time - start_time)
 
-                _pyfhel = Pyfhel()
-                if encrypted == "bfv":
-                    _pyfhel.contextGen(scheme="BFV", **BFV_PARAMETERS)
-                elif encrypted == "ckks":
-                    _pyfhel.contextGen(scheme="CKKS", **CKKS_PARAMETERS)
-                else:
-                    raise ValueError(
-                        f"Unknown cryptographic scheme provided: '{encrypted}'"
-                    )
-                _pyfhel.from_bytes_public_key(_key.public)
+                    _pyfhel = Pyfhel()
+                    if encrypted == "bfv":
+                        _pyfhel.contextGen(scheme="BFV", **BFV_PARAMETERS)
+                    elif encrypted == "ckks":
+                        _pyfhel.contextGen(scheme="CKKS", **CKKS_PARAMETERS)
+                    else:
+                        raise ValueError(
+                            f"Unknown cryptographic scheme provided: '{encrypted}'"
+                        )
+                    _pyfhel.from_bytes_public_key(_key.public)
 
-                if encrypted == "bfv":
-                    _scheme_engine = BFV(pyfhel=_pyfhel)
-                elif encrypted == "ckks":
-                    _scheme_engine = CKKS(pyfhel=_pyfhel)
+                    if encrypted == "bfv":
+                        _scheme_engine = BFV(pyfhel=_pyfhel)
+                    elif encrypted == "ckks":
+                        _scheme_engine = CKKS(pyfhel=_pyfhel)
 
-                keys[order["instrument"]] = (_pyfhel, _scheme_engine)
+                    keys[order["instrument"]] = (_pyfhel, _scheme_engine)
 
-            if encrypted is not None:
-                _, _scheme_engine = keys[order["instrument"]]
-                start_time = time.time()
-                _processed_order = _order(
-                    **{
-                        "instrument": order["instrument"],
-                        "type": order["type"],
-                        "entity": _scheme_engine.encrypt_string(client),
-                        "volume": _scheme_engine.encrypt_float(
-                            value=float(order["volume"]),
+                if encrypted is not None:
+                    _, _scheme_engine = keys[order["instrument"]]
+                    start_time = time.time()
+                    _processed_order = _order(
+                        **{
+                            "instrument": order["instrument"],
+                            "type": order["type"],
+                            "entity": _scheme_engine.encrypt_string(client),
+                            "volume": _scheme_engine.encrypt_float(
+                                value=float(order["volume"]),
+                            ),
+                        },
+                        **(
+                            {
+                                "price": _scheme_engine.encrypt_float(
+                                    value=float(order["price"]),
+                                )
+                            }
+                            if exchange_order_type == ExchangeOrderType.LIMIT
+                            else {}
                         ),
-                    },
+                    )
+                else:
+                    start_time = time.time()
+                    _processed_order = _order(
+                        **{
+                            "instrument": order["instrument"],
+                            "type": order["type"],
+                            "entity": client,
+                            "volume": order["volume"],
+                        },
+                        **(
+                            {
+                                "price": order["price"],
+                            }
+                            if exchange_order_type == ExchangeOrderType.LIMIT
+                            else {}
+                        ),
+                    )
+
+                end_time = time.time()
+                # Time to encrypt / process order
+                metrics["TIME_TO_PROCESS_ORDER"].append(end_time - start_time)
+
+                while (
+                    _start is not None
+                    and order.get("offset") is not None
+                    and time.time() - _start <= float(order.get("offset"))
+                ):
+                    pass  # Wait until offset has finished
+                else:
+                    if _start is not None:
+                        _start = time.time()
+
+                metrics["SIZE_OF_ORDER"].append(sys.getsizeof(_processed_order))
+                try:
+                    start_time = time.time()
+                    response = await _message(_request(order=_processed_order))
+                    end_time = time.time()
+                    metrics["TIME_TO_SEND_ORDER"].append(end_time - start_time)
+                except Exception as e:
+                    print(e)
+                logger.debug(
+                    f"Client ({client}): Order for instrument: '{order['instrument']}' sent with identifier: '{response.uuid}'"
+                )
+                placed_orders[response.uuid] = {
+                    "client": client,
+                    "placed": datetime.now().strftime("%d/%m/%y %H:%M:%S.%f"),
+                    "instrument": order["instrument"],
+                    "type": order["type"],
+                    "volume": order["volume"],
                     **(
-                        {
-                            "price": _scheme_engine.encrypt_float(
-                                value=float(order["price"]),
-                            )
-                        }
+                        {"price": order["price"]}
                         if exchange_order_type == ExchangeOrderType.LIMIT
                         else {}
                     ),
-                )
-            else:
-                start_time = time.time()
-                _processed_order = _order(
-                    **{
-                        "instrument": order["instrument"],
-                        "type": order["type"],
-                        "entity": client,
-                        "volume": order["volume"],
-                    },
-                    **(
-                        {
-                            "price": order["price"],
-                        }
-                        if exchange_order_type == ExchangeOrderType.LIMIT
-                        else {}
-                    ),
-                )
+                }
+                if static_offset is not None:
+                    # We don't want to sleep the entire thread as multiple clients might share it
+                    start_time = time.time()
+                    while time.time() - start_time < static_offset:
+                        pass
 
-            end_time = time.time()
-            # Time to encrypt / process order
-            process_time = end_time - start_time
-
-            while (
-                _start is not None
-                and order.get("offset") is not None
-                and time.time() - _start <= float(order.get("offset"))
-            ):
-                pass  # Wait until offset has finished
-            else:
-                if _start is not None:
-                    _start = time.time()
-
-            try:
-                response = await _message(_request(order=_processed_order))
-            except Exception as e:
-                print(e)
-            logger.debug(
-                f"Client ({client}): Order for instrument: '{order['instrument']}' sent with identifier: '{response.uuid}'"
+            metrics.update(
+                {
+                    "MAX_TIME_TO_GET_PUBLIC_KEY": max(metrics["TIME_TO_GET_PUBLIC_KEY"])
+                    if metrics["TIME_TO_GET_PUBLIC_KEY"]
+                    else None,
+                    "MIN_TIME_TO_GET_PUBLIC_KEY": min(metrics["TIME_TO_GET_PUBLIC_KEY"])
+                    if metrics["TIME_TO_GET_PUBLIC_KEY"]
+                    else None,
+                    "AVERAGE_TIME_TO_GET_PUBLIC_KEY": (
+                        sum(metrics["TIME_TO_GET_PUBLIC_KEY"])
+                        / len(metrics["TIME_TO_GET_PUBLIC_KEY"])
+                    )
+                    if metrics["TIME_TO_GET_PUBLIC_KEY"]
+                    else None,
+                    "MAX_TIME_TO_PROCESS_ORDER": max(metrics["TIME_TO_PROCESS_ORDER"]),
+                    "MIN_TIME_TO_PROCESS_ORDER": min(metrics["TIME_TO_PROCESS_ORDER"]),
+                    "AVERAGE_TIME_TO_PROCESS_ORDER": sum(
+                        metrics["TIME_TO_PROCESS_ORDER"]
+                    )
+                    / len(metrics["TIME_TO_PROCESS_ORDER"]),
+                    "MAX_TIME_TO_SEND_ORDER": max(metrics["TIME_TO_SEND_ORDER"]),
+                    "MIN_TIME_TO_SEND_ORDER": min(metrics["TIME_TO_SEND_ORDER"]),
+                    "AVERAGE_TIME_TO_SEND_ORDER": sum(metrics["TIME_TO_SEND_ORDER"])
+                    / len(metrics["TIME_TO_SEND_ORDER"]),
+                    "AVERAGE_SIZE_OF_ORDER": sum(metrics["SIZE_OF_ORDER"])
+                    / len(metrics["SIZE_OF_ORDER"]),
+                    "MAX_SIZE_OF_ORDER": max(metrics["SIZE_OF_ORDER"]),
+                    "MIN_SIZE_OF_ORDER": min(metrics["SIZE_OF_ORDER"]),
+                }
             )
-            placed_orders[response.uuid] = {
-                "client": client,
-                "placed": datetime.now().strftime("%d/%m/%y %H:%M:%S.%f"),
-                "instrument": order["instrument"],
-                "type": order["type"],
-                "volume": order["volume"],
-                "metrics": {
-                    "process": process_time
-                },
-                **(
-                    {"price": order["price"]}
-                    if exchange_order_type == ExchangeOrderType.LIMIT
-                    else {}
-                ),
-            }
 
-        if client_output is not None:
-            _write_output(client_output, client, placed_orders)
+            if client_output is not None:
+                _write_output(client_output, client, placed_orders, metrics)
+
+            if not run_forever:
+                break

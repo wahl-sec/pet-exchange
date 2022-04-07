@@ -8,148 +8,1201 @@
                 "type": "BID",
                 "instrument": "COMP",
                 "volume": 100,
-                "price": 0.4
+                "price": 40
             },
             {
                 "type": "BID",
                 "instrument": "COMP",
                 "volume": 125,
-                "price": 0.3
+                "price": 30
             },
             {
                 "type": "BID",
                 "instrument": "COMP",
                 "volume": 50,
-                "price": 0.5
+                "price": 50
             },
             {
                 "type": "ASK",
                 "instrument": "COMP",
                 "volume": 25,
-                "price": 0.5
+                "price": 50
             },
             {
                 "type": "BID",
                 "instrument": "COMP",
                 "volume": 70,
-                "price": 0.4
+                "price": 40
             },
             {
                 "type": "ASK",
                 "instrument": "COMP",
                 "volume": 200,
-                "price": 0.1
+                "price": 10
             },
             {
                 "type": "ASK",
                 "instrument": "COMP",
                 "volume": 90,
-                "price": 0.3
+                "price": 30
             },
             {
                 "type": "BID",
                 "instrument": "COMP",
                 "volume": 150,
-                "price": 0.6
+                "price": 60
             },
             {
                 "type": "BID",
                 "instrument": "COMP",
                 "volume": 180,
-                "price": 0.9
+                "price": 90
             },
             {
                 "type": "ASK",
                 "instrument": "COMP",
                 "volume": 120,
-                "price": 0.5
+                "price": 50
             },
             {
                 "type": "BID",
                 "instrument": "COMP",
                 "volume": 125,
-                "price": 0.2
+                "price": 20
             },
             {
                 "type": "ASK",
                 "instrument": "COMP",
                 "volume": 120,
-                "price": 0.1
-            }
-        ],
-        "CBA": [
+                "price": 10
+            },
             {
                 "type": "BID",
                 "instrument": "COMP",
                 "volume": 100,
-                "price": 0.4
+                "price": 40
             },
             {
                 "type": "BID",
                 "instrument": "COMP",
                 "volume": 125,
-                "price": 0.3
+                "price": 30
             },
             {
                 "type": "BID",
                 "instrument": "COMP",
                 "volume": 50,
-                "price": 0.5
+                "price": 50
             },
             {
                 "type": "ASK",
                 "instrument": "COMP",
                 "volume": 25,
-                "price": 0.5
+                "price": 50
             },
             {
                 "type": "BID",
                 "instrument": "COMP",
                 "volume": 70,
-                "price": 0.4
+                "price": 40
             },
             {
                 "type": "ASK",
                 "instrument": "COMP",
                 "volume": 200,
-                "price": 0.1
+                "price": 10
             },
             {
-                "offset": 1,
                 "type": "ASK",
                 "instrument": "COMP",
                 "volume": 90,
-                "price": 0.3
+                "price": 30
             },
             {
                 "type": "BID",
                 "instrument": "COMP",
                 "volume": 150,
-                "price": 0.6
+                "price": 60
             },
             {
                 "type": "BID",
                 "instrument": "COMP",
                 "volume": 180,
-                "price": 0.9
+                "price": 90
             },
             {
                 "type": "ASK",
                 "instrument": "COMP",
                 "volume": 120,
-                "price": 0.5
+                "price": 50
             },
             {
                 "type": "BID",
                 "instrument": "COMP",
                 "volume": 125,
-                "price": 0.2
+                "price": 20
             },
             {
                 "type": "ASK",
                 "instrument": "COMP",
                 "volume": 120,
-                "price": 0.1
+                "price": 10
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 100,
+                "price": 40
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 125,
+                "price": 30
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 50,
+                "price": 50
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 25,
+                "price": 50
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 70,
+                "price": 40
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 200,
+                "price": 10
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 90,
+                "price": 30
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 150,
+                "price": 60
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 180,
+                "price": 90
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 120,
+                "price": 50
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 125,
+                "price": 20
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 120,
+                "price": 10
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 100,
+                "price": 40
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 125,
+                "price": 30
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 50,
+                "price": 50
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 25,
+                "price": 50
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 70,
+                "price": 40
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 200,
+                "price": 10
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 90,
+                "price": 30
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 150,
+                "price": 60
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 180,
+                "price": 90
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 120,
+                "price": 50
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 125,
+                "price": 20
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 120,
+                "price": 10
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 100,
+                "price": 40
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 125,
+                "price": 30
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 50,
+                "price": 50
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 25,
+                "price": 50
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 70,
+                "price": 40
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 200,
+                "price": 10
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 90,
+                "price": 30
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 150,
+                "price": 60
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 180,
+                "price": 90
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 120,
+                "price": 50
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 125,
+                "price": 20
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 120,
+                "price": 10
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 100,
+                "price": 40
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 100,
+                "price": 40
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 125,
+                "price": 30
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 50,
+                "price": 50
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 25,
+                "price": 50
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 70,
+                "price": 40
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 200,
+                "price": 10
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 90,
+                "price": 30
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 150,
+                "price": 60
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 180,
+                "price": 90
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 120,
+                "price": 50
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 125,
+                "price": 20
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 120,
+                "price": 10
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 100,
+                "price": 40
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 125,
+                "price": 30
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 50,
+                "price": 50
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 25,
+                "price": 50
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 70,
+                "price": 40
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 200,
+                "price": 10
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 90,
+                "price": 30
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 150,
+                "price": 60
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 180,
+                "price": 90
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 120,
+                "price": 50
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 125,
+                "price": 20
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 120,
+                "price": 10
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 100,
+                "price": 40
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 125,
+                "price": 30
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 50,
+                "price": 50
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 25,
+                "price": 50
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 70,
+                "price": 40
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 200,
+                "price": 10
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 90,
+                "price": 30
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 150,
+                "price": 60
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 180,
+                "price": 90
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 120,
+                "price": 50
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 125,
+                "price": 20
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 120,
+                "price": 10
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 100,
+                "price": 40
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 125,
+                "price": 30
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 50,
+                "price": 50
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 25,
+                "price": 50
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 70,
+                "price": 40
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 200,
+                "price": 10
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 90,
+                "price": 30
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 150,
+                "price": 60
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 180,
+                "price": 90
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 120,
+                "price": 50
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 125,
+                "price": 20
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 120,
+                "price": 10
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 100,
+                "price": 40
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 125,
+                "price": 30
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 50,
+                "price": 50
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 25,
+                "price": 50
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 70,
+                "price": 40
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 200,
+                "price": 10
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 90,
+                "price": 30
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 150,
+                "price": 60
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 180,
+                "price": 90
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 120,
+                "price": 50
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 125,
+                "price": 20
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 120,
+                "price": 10
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 100,
+                "price": 40
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 100,
+                "price": 40
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 125,
+                "price": 30
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 50,
+                "price": 50
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 25,
+                "price": 50
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 70,
+                "price": 40
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 200,
+                "price": 10
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 90,
+                "price": 30
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 150,
+                "price": 60
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 180,
+                "price": 90
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 120,
+                "price": 50
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 125,
+                "price": 20
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 120,
+                "price": 10
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 100,
+                "price": 40
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 125,
+                "price": 30
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 50,
+                "price": 50
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 25,
+                "price": 50
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 70,
+                "price": 40
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 200,
+                "price": 10
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 90,
+                "price": 30
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 150,
+                "price": 60
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 180,
+                "price": 90
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 120,
+                "price": 50
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 125,
+                "price": 20
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 120,
+                "price": 10
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 100,
+                "price": 40
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 125,
+                "price": 30
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 50,
+                "price": 50
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 25,
+                "price": 50
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 70,
+                "price": 40
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 200,
+                "price": 10
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 90,
+                "price": 30
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 150,
+                "price": 60
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 180,
+                "price": 90
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 120,
+                "price": 50
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 125,
+                "price": 20
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 120,
+                "price": 10
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 100,
+                "price": 40
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 125,
+                "price": 30
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 50,
+                "price": 50
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 25,
+                "price": 50
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 70,
+                "price": 40
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 200,
+                "price": 10
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 90,
+                "price": 30
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 150,
+                "price": 60
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 180,
+                "price": 90
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 120,
+                "price": 50
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 125,
+                "price": 20
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 120,
+                "price": 10
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 100,
+                "price": 40
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 125,
+                "price": 30
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 50,
+                "price": 50
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 25,
+                "price": 50
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 70,
+                "price": 40
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 200,
+                "price": 10
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 90,
+                "price": 30
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 150,
+                "price": 60
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 180,
+                "price": 90
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 120,
+                "price": 50
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 125,
+                "price": 20
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 120,
+                "price": 10
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 100,
+                "price": 40
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 25,
+                "price": 50
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 70,
+                "price": 40
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 200,
+                "price": 10
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 90,
+                "price": 30
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 150,
+                "price": 60
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 180,
+                "price": 90
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 120,
+                "price": 50
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 125,
+                "price": 20
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 120,
+                "price": 10
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 100,
+                "price": 40
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 125,
+                "price": 30
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 50,
+                "price": 50
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 25,
+                "price": 50
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 70,
+                "price": 40
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 200,
+                "price": 10
+            },
+            {
+                "type": "ASK",
+                "instrument": "COMP",
+                "volume": 90,
+                "price": 30
+            },
+            {
+                "type": "BID",
+                "instrument": "COMP",
+                "volume": 150,
+                "price": 60
             }
         ]
     }

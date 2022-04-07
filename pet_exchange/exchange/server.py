@@ -6,6 +6,7 @@ from pathlib import Path
 import concurrent.futures
 import logging
 import json
+import time
 
 from Pyfhel import Pyfhel
 import grpc
@@ -188,7 +189,14 @@ def _start_matcher(
     compare_constant_count: int,
     compare_sigmoid_iterations: int,
     challenge_count: int,
+    delay_start: Optional[int],
 ) -> NoReturn:
+    if delay_start is not None:
+        logger.info(f"Delaying start of matcher with: '{delay_start}' seconds ...")
+        start_time = time.time()
+        while time.time() - start_time <= delay_start:
+            pass
+
     matcher.match(
         encrypted=encrypted,
         local_sort=local_sort,
@@ -212,6 +220,8 @@ async def serve(
     compare_constant_count: int,
     compare_sigmoid_iterations: int,
     challenge_count: int,
+    time_limit: Optional[int],
+    delay_start: Optional[int],
 ) -> NoReturn:
     server = grpc.aio.server(
         options=[
@@ -226,11 +236,38 @@ async def serve(
         with _path.open(mode="w+") as _file:
             _file.write(json.dumps({}))  # Clears the file
 
-    matcher = MatchingEngine(output=exchange_output, instruments=instruments)
+    matcher = MatchingEngine(
+        output=exchange_output,
+        instruments=instruments,
+        local_compare=local_sort,
+        encrypted=encrypted,
+        time_limit=time_limit,
+    )
 
     # TODO: Make this variable maybe, like multiple matchers for different books
     #       Alternatively we can make it so that the matcher creates another layer of threads to handle different books.
     with concurrent.futures.ThreadPoolExecutor(max_workers=5) as pool:
+
+        exchange = ExchangeServer(
+            listen_addr=listen_addr,
+            intermediate_host=intermediate_host,
+            intermediate_port=intermediate_port,
+            matcher=matcher,
+            instruments=instruments,
+        )
+
+        # Runs on the main child-process thread
+        logger.info(
+            f"Exchange-Server ({listen_addr}): Listening for incoming messages ..."
+        )
+        grpc_services.add_ExchangeProtoServicer_to_server(
+            exchange,
+            server,
+        )
+        server.add_insecure_port(listen_addr)
+        await server.start()
+
+        # Runs in the spawned child-thread
         logger.info(f"{matcher.__name__} ({listen_addr}): Waiting for orders ...")
         pool.submit(
             _start_matcher,
@@ -241,30 +278,9 @@ async def serve(
             compare_constant_count=compare_constant_count,
             compare_sigmoid_iterations=compare_sigmoid_iterations,
             challenge_count=challenge_count,
+            delay_start=delay_start,
         )
 
-        # Runs on the main child-process
-        logger.info(
-            f"Exchange-Server ({listen_addr}): Listening for incoming messages ..."
-        )
-
-        exchange = ExchangeServer(
-            listen_addr=listen_addr,
-            intermediate_host=intermediate_host,
-            intermediate_port=intermediate_port,
-            matcher=matcher,
-            instruments=instruments,
-        )
-
-        grpc_services.add_ExchangeProtoServicer_to_server(
-            exchange,
-            server,
-        )
-        server.add_insecure_port(
-            listen_addr
-        )  # TODO: Kolla om hur matcher/boken ska delas mellan processerna
-
-        await server.start()
         await server.wait_for_termination()
 
 

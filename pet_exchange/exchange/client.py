@@ -50,6 +50,22 @@ class ExchangeClient:
                 )
             )
 
+    def GetMinimumValuePlain(
+        self, challenges, instrument, encoding
+    ) -> grpc_buffer_intermediate.GetMinimumValuePlainReply:
+        if encoding == "float":
+            return self.stub.GetMinimumValuePlainFloat(
+                grpc_buffer_intermediate.GetMinimumValuePlainRequest(
+                    challenges=challenges, instrument=instrument
+                )
+            )
+        else:
+            return self.stub.GetMinimumValuePlainInt(
+                grpc_buffer_intermediate.GetMinimumValuePlainRequest(
+                    challenges=challenges, instrument=instrument
+                )
+            )
+
     def DecryptOrder(
         self,
         order: CiphertextOrder,

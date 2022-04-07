@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from typing import NoReturn, Union, List, Dict, Generator, Any, Optional
+from typing import NoReturn, Union, List, Dict, Generator, Any, Optional, Callable
+import functools
 import logging
 
 import pet_exchange.proto.exchange_pb2 as grpc_buffer
@@ -37,6 +38,9 @@ class OrderBook:
         self._book_performed: Dict[str, Dict[str, Any]] = {}
         self._book_metrics: Dict[str, Dict[str, Any]] = {}
         self._exchange_order_type = exchange_order_type
+        self._book_bid_compared: Dict[Tuple[str, str], bool] = {}
+        self._book_ask_compared: Dict[Tuple[str, str], bool] = {}
+        self._sorted = False
 
         self.__name__ = f"Order-Book-{instrument}-{exchange_order_type}"
 
@@ -78,7 +82,26 @@ class OrderBook:
             grpc_buffer.PlaintextMarketOrder,
         ],
     ):
-        self._book_bid[identifier] = order
+        if self._sorted:
+            # bisect https://github.com/python/cpython/blob/3.10/Lib/bisect.py
+            for k, v in self._book_bid.items():
+                lo = 0
+                hi = len(self._book_bid)
+                while lo < hi:
+                    mid = (lo + hi) // 2
+                    _identifier, _order = list(self._book_bid.items())[mid]
+                    if self.compare(order.price, _order.price):
+                        hi = mid
+                        self._book_bid_compared[(identifier, _identifier)] = -1
+                        self._book_bid_compared[(_identifier, identifier)] = 1
+                    else:
+                        lo = mid + 1
+
+                __book = list(self._book_bid.items())
+                __book.insert(lo, (identifier, order))
+                self._book_bid = dict(__book)
+        else:
+            self._book_bid[identifier] = order
 
     def _add_ask(
         self,
@@ -92,21 +115,23 @@ class OrderBook:
     ):
         self._book_ask[identifier] = order
 
-    def _sort_bid(self):
+    def _sort_bid(self, func: Callable):
         """Default sort of plaintext bid orders."""
+        logger.warning(f"BID: {len(self._book_bid)}")
         self._book_bid = {
             k: v
             for k, v in sorted(
-                self._book_bid.items(), key=lambda order: order[1].price, reverse=True
+                self._book_bid.items(), key=functools.cmp_to_key(func), reverse=True
             )
         }
 
-    def _sort_ask(self):
+    def _sort_ask(self, func: Callable):
         """Default sort of plaintext ask orders."""
+        logger.warning(f"ASK: {len(self._book_ask)}")
         self._book_ask = {
             k: v
             for k, v in sorted(
-                self._book_ask.items(), key=lambda order: order[1].price, reverse=False
+                self._book_ask.items(), key=functools.cmp_to_key(func), reverse=False
             )
         }
 
@@ -135,7 +160,7 @@ class OrderBook:
 
         return _identifier
 
-    def add_metrics(self, category: str, value: Dict[str, Any], section: str=None):
+    def add_metrics(self, category: str, value: Dict[str, Any], section: str = None):
         """Add metrics to the book, this is purely used for evaluation and does not provide any functionality to the trading."""
         if category not in self._book_metrics:
             self._book_metrics[category] = {}
@@ -144,6 +169,12 @@ class OrderBook:
             self._book_metrics[category][section] = []
 
         self._book_metrics[category][section].append(value)
+
+    def sort(self, type: OrderType, func: Callable):
+        """Inlines sort the order book.
+        Uses a custom sorting function passed by parameter.
+        """
+        getattr(self, f"_sort_{type.name.lower()}")(func)
 
     def add_performed(
         self,
@@ -185,10 +216,6 @@ class OrderBook:
             },
         }
 
-    def sort(self, type: OrderType):
-        """Inlines sort the unencrypted order book directly."""
-        getattr(self, f"_sort_{type.name.lower()}")()
-
     def merge(
         self,
         other: Union["OrderBook", "EncryptedOrderBook"],
@@ -208,3 +235,5 @@ class OrderBook:
             key: value for key, value in self._book_bid.items() if key not in b_dropped
         }
         self._book_performed.update(other._book_performed)
+        self._book_bid_compared.update(other._book_bid_compared)
+        self._book_ask_compared.update(other._book_ask_compared)

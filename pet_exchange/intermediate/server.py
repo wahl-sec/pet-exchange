@@ -2,7 +2,9 @@
 # -*- coding: utf-8 -*-
 
 from typing import NoReturn, List, Optional
+from pathlib import Path
 import logging
+import json
 
 import grpc
 import pet_exchange.proto.intermediate_pb2 as grpc_buffer
@@ -26,11 +28,13 @@ class IntermediateServer(grpc_services.IntermediateProtoServicer):
         listen_addr: str,
         exchange_host: str,
         exchange_port: int,
+        intermediate_output: str,
         instruments: List[str],
         encrypted: str,
     ):
         self.listen_addr = listen_addr
         self.scheme = encrypted
+        self.output = intermediate_output
         self._exchange_host, self._exchange_port = (exchange_host, exchange_port)
 
         self._exchange_channel = grpc.aio.insecure_channel(
@@ -40,11 +44,18 @@ class IntermediateServer(grpc_services.IntermediateProtoServicer):
                 ("grpc.max_receive_message_length", MAX_GRPC_MESSAGE_LENGTH),
             ],
         )
-        self._key_engine = KeyEngine()
-        for instrument in instruments:
-            self._key_engine.generate_key_handler(
-                instrument=instrument, scheme=self.scheme
-            )
+
+        if intermediate_output is not None:
+            _path = Path(intermediate_output)
+            with _path.open(mode="w+") as _file:
+                _file.write(json.dumps({}))  # Clears the file
+
+        if encrypted is not None:
+            self._key_engine = KeyEngine()
+            for instrument in instruments:
+                self._key_engine.generate_key_handler(
+                    instrument=instrument, scheme=self.scheme
+                )
 
         super(grpc_services.IntermediateProtoServicer).__init__()
 
@@ -55,8 +66,12 @@ class IntermediateServer(grpc_services.IntermediateProtoServicer):
         handler = self._key_engine.generate_key_handler(
             instrument=request.instrument, scheme=self.scheme
         )
+        self._write_output(instrument=request.instrument)
         return grpc_buffer.KeyGenReply(
-            context=handler.key_pair.context, public=handler.key_pair.public, secret=handler.key_pair.secret, relin=handler.key_pair.relin
+            context=handler.key_pair.context,
+            public=handler.key_pair.public,
+            secret=handler.key_pair.secret,
+            relin=handler.key_pair.relin,
         )
 
     @route_logger(grpc_buffer.EncryptOrderReply)
@@ -114,9 +129,14 @@ class IntermediateServer(grpc_services.IntermediateProtoServicer):
         self, request: grpc_buffer.GetMinimumValueRequest, context: grpc.ServicerContext
     ) -> grpc_buffer.GetMinimumValueReply:
         handler = self._key_engine.key_handler(instrument=request.instrument)
-        _challenges: List[ChallengeReply] = []
+        _challenges: List[grpc_buffer.ChallengeResult] = []
         for challenge in request.challenges:
-            _challenges.append(grpc_buffer.ChallengeResult(minimum=challenge.first) if handler._schema_engine.decrypt_float(challenge.first) < handler._schema_engine.decrypt_float(challenge.second) else grpc_buffer.ChallengeResult(minimum=challenge.second))
+            _challenges.append(
+                grpc_buffer.ChallengeResult(minimum=True)
+                if handler._schema_engine.decrypt_float(challenge.first)
+                < handler._schema_engine.decrypt_float(challenge.second)
+                else grpc_buffer.ChallengeResult(minimum=False)
+            )
 
         return grpc_buffer.GetMinimumValueReply(challenges=_challenges)
 
@@ -125,11 +145,70 @@ class IntermediateServer(grpc_services.IntermediateProtoServicer):
         self, request: grpc_buffer.GetMinimumValueRequest, context: grpc.ServicerContext
     ) -> grpc_buffer.GetMinimumValueReply:
         handler = self._key_engine.key_handler(instrument=request.instrument)
-        _challenges: List[ChallengeReply] = []
+        _challenges: List[grpc_buffer.ChallengeResult] = []
         for challenge in request.challenges:
-            _challenges.append(grpc_buffer.ChallengeResult(minimum=challenge.first) if handler._schema_engine.decrypt_float(challenge.first) < handler._schema_engine.decrypt_float(challenge.second) else grpc_buffer.ChallengeResult(minimum=challenge.second))
+            _challenges.append(
+                grpc_buffer.ChallengeResult(minimum=True)
+                if handler._schema_engine.decrypt_float(challenge.first)
+                < handler._schema_engine.decrypt_float(challenge.second)
+                else grpc_buffer.ChallengeResult(minimum=False)
+            )
 
         return grpc_buffer.GetMinimumValueReply(challenges=_challenges)
+
+    @route_logger_sync(grpc_buffer.GetMinimumValuePlainReply)
+    def GetMinimumValuePlainInt(
+        self,
+        request: grpc_buffer.GetMinimumValuePlainRequest,
+        context: grpc.ServicerContext,
+    ) -> grpc_buffer.GetMinimumValuePlainReply:
+        _challenges: List[grpc_buffer.ChallengePlainResult] = []
+        for challenge in request.challenges:
+            _challenges.append(
+                grpc_buffer.ChallengePlainResult(minimum=True)
+                if challenge.first < challenge.second
+                else grpc_buffer.ChallengePlainResult(minimum=False)
+            )
+
+        return grpc_buffer.GetMinimumValuePlainReply(challenges=_challenges)
+
+    @route_logger_sync(grpc_buffer.GetMinimumValuePlainReply)
+    def GetMinimumValuePlainFloat(
+        self,
+        request: grpc_buffer.GetMinimumValuePlainRequest,
+        context: grpc.ServicerContext,
+    ) -> grpc_buffer.GetMinimumValuePlainReply:
+        _challenges: List[grpc_buffer.ChallengePlainResult] = []
+        for challenge in request.challenges:
+            _challenges.append(
+                grpc_buffer.ChallengePlainResult(minimum=True)
+                if challenge.first < challenge.second
+                else grpc_buffer.ChallengePlainResult(minimum=False)
+            )
+
+        return grpc_buffer.GetMinimumValuePlainReply(challenges=_challenges)
+
+    def _write_output(self, instrument: str) -> None:
+        """Writes the output of the current metrics for a certain instrument to a JSON file"""
+        _path = Path(self.output)
+        _book = {}
+
+        if _path.exists():
+            with _path.open(mode="r+") as _file:
+                data = json.load(_file)
+                if instrument not in data:
+                    data[instrument] = {"METRICS": {}}
+
+                handler = self._key_engine.key_handler(instrument)
+                data[instrument]["METRICS"] = {
+                    "TIME_TO_GENERATE_KEYS": handler.timings["TIME_TO_GENERATE_KEYS"],
+                    "TIME_TO_GENERATE_RELIN_KEYS": handler.timings[
+                        "TIME_TO_GENERATE_RELIN_KEYS"
+                    ],
+                }
+
+        with _path.open(mode="w+") as _file:
+            _file.write(json.dumps(data))
 
 
 async def serve(
@@ -137,6 +216,7 @@ async def serve(
     intermediate_port: int,
     exchange_host: str,
     exchange_port: int,
+    intermediate_output: str,
     encrypted: Optional[str],
     instruments: List[str],
 ) -> NoReturn:
@@ -153,6 +233,7 @@ async def serve(
             listen_addr=listen_addr,
             exchange_host=exchange_host,
             exchange_port=exchange_port,
+            intermediate_output=intermediate_output,
             instruments=instruments,
             encrypted=encrypted,
         ),
