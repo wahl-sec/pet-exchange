@@ -19,7 +19,7 @@ import pet_exchange.proto.exchange_pb2_grpc as grpc_services
 
 from pet_exchange.exchange import ExchangeOrderType
 from pet_exchange.common.utils import MAX_GRPC_MESSAGE_LENGTH
-from pet_exchange.common.crypto import BFV_PARAMETERS, CKKS_PARAMETERS, BFV, CKKS
+from pet_exchange.common.crypto import CKKS_PARAMETERS, CKKS
 
 
 def _write_output(
@@ -160,33 +160,23 @@ async def client(
 
         while True:
             for order in orders:
-                _scheme_engine: Optional[Union[BFV, CKKS]] = None
+                _scheme_engine: Optional[CKKS] = None
 
                 if encrypted is not None and order["instrument"] not in keys:
                     start_time = time.time()
                     _key = await stub.GetPublicKey(
                         grpc_buffer.GetPublicKeyRequest(
-                            instrument=order["instrument"], scheme=encrypted
+                            instrument=order["instrument"]
                         )
                     )
                     end_time = time.time()
                     metrics["TIME_TO_GET_PUBLIC_KEY"].append(end_time - start_time)
 
                     _pyfhel = Pyfhel()
-                    if encrypted == "bfv":
-                        _pyfhel.contextGen(scheme="BFV", **BFV_PARAMETERS)
-                    elif encrypted == "ckks":
-                        _pyfhel.contextGen(scheme="CKKS", **CKKS_PARAMETERS)
-                    else:
-                        raise ValueError(
-                            f"Unknown cryptographic scheme provided: '{encrypted}'"
-                        )
+                    _pyfhel.contextGen(scheme="CKKS", **CKKS_PARAMETERS)
                     _pyfhel.from_bytes_public_key(_key.public)
 
-                    if encrypted == "bfv":
-                        _scheme_engine = BFV(pyfhel=_pyfhel)
-                    elif encrypted == "ckks":
-                        _scheme_engine = CKKS(pyfhel=_pyfhel)
+                    _scheme_engine = CKKS(pyfhel=_pyfhel)
 
                     keys[order["instrument"]] = (_pyfhel, _scheme_engine)
 

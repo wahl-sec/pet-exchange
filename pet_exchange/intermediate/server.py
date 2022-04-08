@@ -33,7 +33,6 @@ class IntermediateServer(grpc_services.IntermediateProtoServicer):
         encrypted: str,
     ):
         self.listen_addr = listen_addr
-        self.scheme = encrypted
         self.output = intermediate_output
         self._exchange_host, self._exchange_port = (exchange_host, exchange_port)
 
@@ -50,11 +49,11 @@ class IntermediateServer(grpc_services.IntermediateProtoServicer):
             with _path.open(mode="w+") as _file:
                 _file.write(json.dumps({}))  # Clears the file
 
-        if encrypted is not None:
+        if encrypted:
             self._key_engine = KeyEngine()
             for instrument in instruments:
                 self._key_engine.generate_key_handler(
-                    instrument=instrument, scheme=self.scheme
+                    instrument=instrument
                 )
 
         super(grpc_services.IntermediateProtoServicer).__init__()
@@ -64,7 +63,7 @@ class IntermediateServer(grpc_services.IntermediateProtoServicer):
         self, request: grpc_buffer.KeyGenRequest, context: grpc.aio.ServicerContext
     ) -> grpc_buffer.KeyGenReply:
         handler = self._key_engine.generate_key_handler(
-            instrument=request.instrument, scheme=self.scheme
+            instrument=request.instrument
         )
         self._write_output(instrument=request.instrument)
         return grpc_buffer.KeyGenReply(

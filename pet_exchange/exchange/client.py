@@ -25,7 +25,6 @@ class ExchangeClient:
     async def GetPublicKey(
         self,
         instrument: str,
-        scheme: str,
         request: grpc_buffer_exchange.GetPublicKeyRequest,
         context: grpc.aio.ServicerContext,
     ) -> grpc_buffer_intermediate.KeyGenReply:

@@ -24,9 +24,8 @@ class KeyPair:
 
 
 class KeyHandler:
-    def __init__(self, instrument: str, scheme: str):
+    def __init__(self, instrument: str):
         self.instrument: str = instrument
-        self.scheme = scheme
         self.timings = {
             "TIME_TO_GENERATE_KEYS": None,
             "TIME_TO_GENERATE_RELIN_KEYS": None,
@@ -35,23 +34,14 @@ class KeyHandler:
         # https://github.com/microsoft/SEAL/blob/main/native/examples/4_ckks_basics.cpp#L78
         self.pyfhel: Pyfhel = Pyfhel()
         try:
-            if scheme == "bfv":
-                self.pyfhel.contextGen(scheme="BFV", **BFV_PARAMETERS)
-            elif scheme == "ckks":
-                self.pyfhel.contextGen(scheme="CKKS", **CKKS_PARAMETERS)
-            else:
-                raise ValueError(f"Unknown cryptographic scheme provided: '{scheme}'")
+            self.pyfhel.contextGen(scheme="CKKS", **CKKS_PARAMETERS)
         except Exception as e:
             print("Failed to generate context", e)
             raise e from None
 
         self._key_pair: KeyPair = None
         self._context = self.pyfhel.to_bytes_context()
-        self._schema_engine: Union[BFV, CKKS] = None
-        if scheme == "bfv":
-            self._schema_engine = BFV(self.pyfhel)
-        elif scheme == "ckks":
-            self._schema_engine = CKKS(self.pyfhel)
+        self._schema_engine = CKKS(self.pyfhel)
 
     @property
     def key_pair(self) -> KeyPair:
@@ -165,13 +155,13 @@ class KeyEngine:
 
         return handler
 
-    def generate_key_handler(self, instrument: str, scheme: str) -> KeyHandler:
+    def generate_key_handler(self, instrument: str) -> KeyHandler:
         try:
             return self.key_handler(instrument=instrument)
         except KeyError:
             logger.info(
                 f"Intermediate-Keys: Generating new key-pair for instrument: '{instrument}'"
             )
-            handler = KeyHandler(instrument=instrument, scheme=scheme)
+            handler = KeyHandler(instrument=instrument)
             self._save_key_handler(handler=handler, _skip_pre_check=True)
             return handler

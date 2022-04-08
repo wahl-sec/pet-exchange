@@ -293,9 +293,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "-c",
         "--cryptographic",
-        help="Run the exchange in cryptographic mode wíth a given scheme, defaults to bfv",
-        choices=("bfv", "ckks"),
-        default="bfv",
+        help="Run the exchange in cryptographic mode",
+        action="store_true"
     )
 
     exchange = parser.add_argument_group("Exchange")
@@ -469,6 +468,10 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
+
+    if not args.cryptographic and not args.plaintext:
+        logger.warning(f"No mode set, defaulting to plaintext")
+        args.plaintext = True
 
     if args.debug:
         LOGGER_CONFIG["loggers"]["__main__"]["handlers"] = ["DEBUG"]

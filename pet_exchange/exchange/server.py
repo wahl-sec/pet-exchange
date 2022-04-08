@@ -16,7 +16,7 @@ import pet_exchange.proto.exchange_pb2_grpc as grpc_services
 from pet_exchange.exchange import OrderType, ExchangeOrderType
 from pet_exchange.engine.matcher import MatchingEngine
 from pet_exchange.common.utils import MAX_GRPC_MESSAGE_LENGTH
-from pet_exchange.common.crypto import BFV_PARAMETERS, CKKS_PARAMETERS
+from pet_exchange.common.crypto import CKKS, CKKS_PARAMETERS
 from pet_exchange.exchange.client import ExchangeClient
 from pet_exchange.exchange.book import EncryptedOrderBook, OrderBook
 from pet_exchange.utils.logging import route_logger
@@ -82,7 +82,6 @@ class ExchangeServer(grpc_services.ExchangeProtoServicer):
 
         _key = await self._intermediate_channel.GetPublicKey(
             instrument=request.instrument,
-            scheme=request.scheme,
             request=request,
             context=context,
         )
@@ -90,14 +89,7 @@ class ExchangeServer(grpc_services.ExchangeProtoServicer):
         # TODO: This needs to change if we want to be able to key-switch
         if request.instrument not in self._matcher.pyfhel:
             _pyfhel = Pyfhel()
-            if request.scheme == "bfv":
-                _pyfhel.contextGen(scheme="BFV", **BFV_PARAMETERS)
-            elif request.scheme == "ckks":
-                _pyfhel.contextGen(scheme="CKKS", **CKKS_PARAMETERS)
-            else:
-                raise ValueError(
-                    f"Unknown cryptographic scheme provided: '{request.scheme}'"
-                )
+            _pyfhel.contextGen(scheme="CKKS", **CKKS_PARAMETERS)
 
             _pyfhel.from_bytes_context(_key.context)
             _pyfhel.from_bytes_public_key(_key.public)
@@ -107,6 +99,7 @@ class ExchangeServer(grpc_services.ExchangeProtoServicer):
             self._matcher.keys[request.instrument] = _key.public
             self._matcher.relin_keys[request.instrument] = _key.relin
             self._matcher.pyfhel[request.instrument] = _pyfhel
+            self._matcher.crypto[request.instrument] = CKKS(pyfhel=_pyfhel)
 
         return grpc_buffer.GetPublicKeyReply(public=_key.public)
 
@@ -124,7 +117,7 @@ class ExchangeServer(grpc_services.ExchangeProtoServicer):
             ),
         )
 
-        return grpc_buffer.AddOrderLimitReply(uuid=_order_book.add(order=request.order))
+        return grpc_buffer.AddOrderLimitReply(uuid=_order_book.add(order=request.order, matcher=self._matcher))
 
     @route_logger(grpc_buffer.AddOrderLimitPlainReply)
     async def AddOrderLimitPlain(
@@ -141,7 +134,7 @@ class ExchangeServer(grpc_services.ExchangeProtoServicer):
         )
 
         return grpc_buffer.AddOrderLimitPlainReply(
-            uuid=_order_book.add(order=request.order)
+            uuid=_order_book.add(order=request.order, matcher=self._matcher)
         )
 
     @route_logger(grpc_buffer.AddOrderMarketReply)
@@ -159,7 +152,7 @@ class ExchangeServer(grpc_services.ExchangeProtoServicer):
         )
 
         return grpc_buffer.AddOrderMarketReply(
-            uuid=_order_book.add(order=request.order)
+            uuid=_order_book.add(order=request.order, matcher=self._matcher)
         )
 
     @route_logger(grpc_buffer.AddOrderMarketPlainReply)
@@ -177,7 +170,7 @@ class ExchangeServer(grpc_services.ExchangeProtoServicer):
         )
 
         return grpc_buffer.AddOrderMarketPlainReply(
-            uuid=_order_book.add(order=request.order)
+            uuid=_order_book.add(order=request.order, matcher=self._matcher)
         )
 
 
@@ -200,10 +193,6 @@ def _start_matcher(
     matcher.match(
         encrypted=encrypted,
         local_sort=local_sort,
-        compare_iterations=compare_iterations,
-        compare_constant_count=compare_constant_count,
-        compare_sigmoid_iterations=compare_sigmoid_iterations,
-        challenge_count=challenge_count,
     )
 
 
@@ -242,6 +231,10 @@ async def serve(
         local_compare=local_sort,
         encrypted=encrypted,
         time_limit=time_limit,
+        compare_iterations=compare_iterations,
+        compare_constant_count=compare_constant_count,
+        compare_sigmoid_iterations=compare_sigmoid_iterations,
+        challenge_count=challenge_count,
     )
 
     # TODO: Make this variable maybe, like multiple matchers for different books
