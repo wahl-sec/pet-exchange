@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 from typing import NoReturn, List, Optional
+from concurrent.futures import ThreadPoolExecutor, Future, as_completed
 from pathlib import Path
 import logging
 import json
@@ -52,9 +53,7 @@ class IntermediateServer(grpc_services.IntermediateProtoServicer):
         if encrypted:
             self._key_engine = KeyEngine()
             for instrument in instruments:
-                self._key_engine.generate_key_handler(
-                    instrument=instrument
-                )
+                self._key_engine.generate_key_handler(instrument=instrument)
 
         super(grpc_services.IntermediateProtoServicer).__init__()
 
@@ -62,9 +61,7 @@ class IntermediateServer(grpc_services.IntermediateProtoServicer):
     async def KeyGen(
         self, request: grpc_buffer.KeyGenRequest, context: grpc.aio.ServicerContext
     ) -> grpc_buffer.KeyGenReply:
-        handler = self._key_engine.generate_key_handler(
-            instrument=request.instrument
-        )
+        handler = self._key_engine.generate_key_handler(instrument=request.instrument)
         self._write_output(instrument=request.instrument)
         return grpc_buffer.KeyGenReply(
             context=handler.key_pair.context,
@@ -104,10 +101,10 @@ class IntermediateServer(grpc_services.IntermediateProtoServicer):
         handler = self._key_engine.key_handler(instrument=request.order.instrument)
         return grpc_buffer.DecryptOrderReply(
             order=handler.decrypt(ciphertext=request.order),
-            entity_bid=handler._schema_engine.decrypt_string(request.entity_bid)
+            entity_bid=handler.crypto.decrypt_string(request.entity_bid)
             if hasattr(request, "entity_bid")
             else None,
-            entity_ask=handler._schema_engine.decrypt_string(request.entity_ask)
+            entity_ask=handler.crypto.decrypt_string(request.entity_ask)
             if hasattr(request, "entity_ask")
             else None,
         )
@@ -124,68 +121,58 @@ class IntermediateServer(grpc_services.IntermediateProtoServicer):
         )
 
     @route_logger_sync(grpc_buffer.GetMinimumValueReply)
-    def GetMinimumValueInt(
+    def GetMinimumValue(
         self, request: grpc_buffer.GetMinimumValueRequest, context: grpc.ServicerContext
     ) -> grpc_buffer.GetMinimumValueReply:
         handler = self._key_engine.key_handler(instrument=request.instrument)
-        _challenges: List[grpc_buffer.ChallengeResult] = []
-        for challenge in request.challenges:
-            _challenges.append(
-                grpc_buffer.ChallengeResult(minimum=True)
-                if handler._schema_engine.decrypt_float(challenge.first)
-                < handler._schema_engine.decrypt_float(challenge.second)
-                else grpc_buffer.ChallengeResult(minimum=False)
+
+        def compare(first, second):
+            return grpc_buffer.ChallengeResult(
+                minimum=handler.crypto.decrypt_float(first)
+                < handler.crypto.decrypt_float(second)
             )
 
-        return grpc_buffer.GetMinimumValueReply(challenges=_challenges)
+        _challenges: List[grpc_buffer.ChallengeResult] = [0] * len(request.challenges)
+        with ThreadPoolExecutor(max_workers=len(request.challenges)) as pool:
+            future_to_challenges: Dict[Future, int] = {}
+            for index, challenge in enumerate(request.challenges):
+                future_to_challenges[
+                    pool.submit(compare, first=challenge.first, second=challenge.second)
+                ] = index
 
-    @route_logger_sync(grpc_buffer.GetMinimumValueReply)
-    def GetMinimumValueFloat(
-        self, request: grpc_buffer.GetMinimumValueRequest, context: grpc.ServicerContext
-    ) -> grpc_buffer.GetMinimumValueReply:
-        handler = self._key_engine.key_handler(instrument=request.instrument)
-        _challenges: List[grpc_buffer.ChallengeResult] = []
-        for challenge in request.challenges:
-            _challenges.append(
-                grpc_buffer.ChallengeResult(minimum=True)
-                if handler._schema_engine.decrypt_float(challenge.first)
-                < handler._schema_engine.decrypt_float(challenge.second)
-                else grpc_buffer.ChallengeResult(minimum=False)
-            )
+            for future in as_completed(future_to_challenges):
+                index = future_to_challenges[future]
+                _challenges[index] = future.result()
 
         return grpc_buffer.GetMinimumValueReply(challenges=_challenges)
 
     @route_logger_sync(grpc_buffer.GetMinimumValuePlainReply)
-    def GetMinimumValuePlainInt(
+    def GetMinimumValuePlain(
         self,
         request: grpc_buffer.GetMinimumValuePlainRequest,
         context: grpc.ServicerContext,
     ) -> grpc_buffer.GetMinimumValuePlainReply:
-        _challenges: List[grpc_buffer.ChallengePlainResult] = []
-        for challenge in request.challenges:
-            _challenges.append(
-                grpc_buffer.ChallengePlainResult(minimum=True)
-                if challenge.first < challenge.second
-                else grpc_buffer.ChallengePlainResult(minimum=False)
+        handler = self._key_engine.key_handler(instrument=request.instrument)
+
+        def compare(first, second):
+            return grpc_buffer.ChallengeResult(
+                minimum=handler.crypto.decrypt_float(first)
+                < handler.crypto.decrypt_float(second)
             )
 
-        return grpc_buffer.GetMinimumValuePlainReply(challenges=_challenges)
+        _challenges: List[grpc_buffer.ChallengeResult] = [0] * len(request.challenges)
+        with ThreadPoolExecutor(max_workers=len(request.challenges)) as pool:
+            future_to_challenges: Dict[Future, int] = {}
+            for index, challenge in enumerate(request.challenges):
+                future_to_challenges[
+                    pool.submit(compare, first=challenge.first, second=challenge.second)
+                ] = index
 
-    @route_logger_sync(grpc_buffer.GetMinimumValuePlainReply)
-    def GetMinimumValuePlainFloat(
-        self,
-        request: grpc_buffer.GetMinimumValuePlainRequest,
-        context: grpc.ServicerContext,
-    ) -> grpc_buffer.GetMinimumValuePlainReply:
-        _challenges: List[grpc_buffer.ChallengePlainResult] = []
-        for challenge in request.challenges:
-            _challenges.append(
-                grpc_buffer.ChallengePlainResult(minimum=True)
-                if challenge.first < challenge.second
-                else grpc_buffer.ChallengePlainResult(minimum=False)
-            )
+            for future in as_completed(future_to_challenges):
+                index = future_to_challenges[future]
+                _challenges[index] = future.result()
 
-        return grpc_buffer.GetMinimumValuePlainReply(challenges=_challenges)
+        return grpc_buffer.GetMinimumValueReply(challenges=_challenges)
 
     def _write_output(self, instrument: str) -> None:
         """Writes the output of the current metrics for a certain instrument to a JSON file"""

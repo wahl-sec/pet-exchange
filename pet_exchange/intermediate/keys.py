@@ -41,7 +41,7 @@ class KeyHandler:
 
         self._key_pair: KeyPair = None
         self._context = self.pyfhel.to_bytes_context()
-        self._schema_engine = CKKS(self.pyfhel)
+        self.crypto = CKKS(self.pyfhel)
 
     @property
     def key_pair(self) -> KeyPair:
@@ -88,8 +88,8 @@ class KeyHandler:
         return CiphertextOrder(
             type=plaintext.type,
             instrument=plaintext.instrument,
-            volume=self._schema_engine.encrypt_int(plaintext.volume),
-            price=self._schema_engine.encrypt_float(plaintext.price),
+            volume=self.crypto.encrypt_int(plaintext.volume),
+            price=self.crypto.encrypt_float(plaintext.price),
         )
 
     def decrypt(self, ciphertext: CiphertextOrder) -> PlaintextOrder:
@@ -100,8 +100,8 @@ class KeyHandler:
         return PlaintextOrder(
             type=ciphertext.type,
             instrument=ciphertext.instrument,
-            volume=round(self._schema_engine.decrypt_float(ciphertext.volume)),
-            price=round(self._schema_engine.decrypt_float(ciphertext.price), 2),
+            volume=round(self.crypto.decrypt_float(ciphertext.volume)),
+            price=round(self.crypto.decrypt_float(ciphertext.price), 2),
         )
 
 

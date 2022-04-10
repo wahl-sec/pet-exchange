@@ -160,14 +160,12 @@ async def client(
 
         while True:
             for order in orders:
-                _scheme_engine: Optional[CKKS] = None
+                crypto: Optional[CKKS] = None
 
                 if encrypted is not None and order["instrument"] not in keys:
                     start_time = time.time()
                     _key = await stub.GetPublicKey(
-                        grpc_buffer.GetPublicKeyRequest(
-                            instrument=order["instrument"]
-                        )
+                        grpc_buffer.GetPublicKeyRequest(instrument=order["instrument"])
                     )
                     end_time = time.time()
                     metrics["TIME_TO_GET_PUBLIC_KEY"].append(end_time - start_time)
@@ -176,25 +174,25 @@ async def client(
                     _pyfhel.contextGen(scheme="CKKS", **CKKS_PARAMETERS)
                     _pyfhel.from_bytes_public_key(_key.public)
 
-                    _scheme_engine = CKKS(pyfhel=_pyfhel)
+                    crypto = CKKS(pyfhel=_pyfhel)
 
-                    keys[order["instrument"]] = (_pyfhel, _scheme_engine)
+                    keys[order["instrument"]] = (_pyfhel, crypto)
 
                 if encrypted is not None:
-                    _, _scheme_engine = keys[order["instrument"]]
+                    _, crypto = keys[order["instrument"]]
                     start_time = time.time()
                     _processed_order = _order(
                         **{
                             "instrument": order["instrument"],
                             "type": order["type"],
-                            "entity": _scheme_engine.encrypt_string(client),
-                            "volume": _scheme_engine.encrypt_float(
+                            "entity": crypto.encrypt_string(client),
+                            "volume": crypto.encrypt_float(
                                 value=float(order["volume"]),
                             ),
                         },
                         **(
                             {
-                                "price": _scheme_engine.encrypt_float(
+                                "price": crypto.encrypt_float(
                                     value=float(order["price"]),
                                 )
                             }
