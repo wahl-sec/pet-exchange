@@ -64,6 +64,7 @@ async def client(
     _start: Optional[int] = None,
     static_offset: Optional[float] = None,
     run_forever: bool = False,
+    compress: Optional[int] = None,
 ) -> NoReturn:
     host, port = exchange
     listen_addr = f"{host}:{port}"
@@ -174,7 +175,7 @@ async def client(
                     _pyfhel.contextGen(scheme="CKKS", **CKKS_PARAMETERS)
                     _pyfhel.from_bytes_public_key(_key.public)
 
-                    crypto = CKKS(pyfhel=_pyfhel)
+                    crypto = CKKS(pyfhel=_pyfhel, compress=compress)
 
                     keys[order["instrument"]] = (_pyfhel, crypto)
 
@@ -187,15 +188,11 @@ async def client(
                             "type": order["type"],
                             "entity": crypto.encrypt_string(client),
                             "volume": crypto.encrypt_float(
-                                value=float(order["volume"]),
+                                value=float(order["volume"])
                             ),
                         },
                         **(
-                            {
-                                "price": crypto.encrypt_float(
-                                    value=float(order["price"]),
-                                )
-                            }
+                            {"price": crypto.encrypt_float(value=float(order["price"]))}
                             if exchange_order_type == ExchangeOrderType.LIMIT
                             else {}
                         ),

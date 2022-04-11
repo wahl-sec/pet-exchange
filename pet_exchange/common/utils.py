@@ -6,7 +6,7 @@ from random import randint, uniform
 import uuid
 import zlib
 
-from pet_exchange.common.crypto import CKKS, BFV
+from pet_exchange.common.crypto import CKKS
 from pet_exchange.proto.intermediate_pb2 import Challenge, ChallengePlain
 
 # Remove secret key from message and also look into compression for bytes
@@ -26,7 +26,7 @@ def generate_random_float() -> float:
 
 
 def generate_challenges(
-    engine: Optional[Union[CKKS, BFV]], n: int
+    engine: Optional[CKKS], n: int
 ) -> Tuple[List[int], List[Union[Challenge, ChallengePlain]]]:
     """Generate a list of challenges used to ensure the third party is correct when determining results."""
     _expected: List[int] = []
@@ -37,8 +37,8 @@ def generate_challenges(
             b = uniform(0, 1)
             _challenges.append(
                 Challenge(
-                    first=engine.encrypt_float(a),
-                    second=engine.encrypt_float(b),
+                    first=engine.encrypt_float(a, to_bytes=True),
+                    second=engine.encrypt_float(b, to_bytes=True),
                 )
             )
             _expected.append(-1 if a < b else 1)

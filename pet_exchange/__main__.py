@@ -52,6 +52,7 @@ SERVER_VARIABLES = {
         "exchange_challenge_count",
         "exchange_time_limit",
         "exchange_delay_start",
+        "compress",
     ],
     "intermediate": [
         "intermediate_host",
@@ -61,6 +62,7 @@ SERVER_VARIABLES = {
         "exchange_port",
         "plaintext",
         "cryptographic",
+        "compress",
     ],
 }
 
@@ -105,6 +107,7 @@ def _start_client(parameters: Dict[str, Any]) -> NoReturn:
                 exchange_order_type=_kwargs["EXCHANGE_ORDER_TYPE"],
                 static_offset=_kwargs["CLIENT_STATIC_OFFSET"],
                 run_forever=_kwargs["CLIENT_RUN_FOREVER"],
+                compress=_kwargs["COMPRESS"],
                 _start=None if not _kwargs["USE_OFFSET"] else _start,
             )
         )
@@ -141,6 +144,7 @@ def _resolve_client_information_files(args) -> Dict[str, Dict[str, Any]]:
                     "USE_OFFSET": args.client_offset,
                     "CLIENT_STATIC_OFFSET": args.client_static_offset,
                     "CLIENT_RUN_FOREVER": args.client_run_forever,
+                    "COMPRESS": args.compress,
                     "EXCHANGE_ORDER_TYPE": args.client_order_type
                     if args.client_order_type
                     else (
@@ -294,7 +298,14 @@ if __name__ == "__main__":
         "-c",
         "--cryptographic",
         help="Run the exchange in cryptographic mode",
-        action="store_true"
+        action="store_true",
+    )
+    parser.add_argument(
+        "-z",
+        "--compress",
+        help="Compress orders using 'zlib', define the level to use from 0-9, defaults to no comression",
+        type=int,
+        default=None,
     )
 
     exchange = parser.add_argument_group("Exchange")

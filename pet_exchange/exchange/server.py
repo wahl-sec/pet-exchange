@@ -36,6 +36,7 @@ class ExchangeServer(grpc_services.ExchangeProtoServicer):
         intermediate_port: int,
         matcher: MatchingEngine,
         instruments: List[str],
+        compress: Optional[int] = None,
     ):
         self.listen_addr = listen_addr
         self._intermediate_host, self._intermediate_port = (
@@ -44,6 +45,7 @@ class ExchangeServer(grpc_services.ExchangeProtoServicer):
         )
         self._instruments = instruments
         self._matcher = matcher
+        self._compress = compress
 
         self._intermediate_channel = ExchangeClient(
             listen_addr=self.listen_addr,
@@ -99,7 +101,9 @@ class ExchangeServer(grpc_services.ExchangeProtoServicer):
             self._matcher.keys[request.instrument] = _key.public
             self._matcher.relin_keys[request.instrument] = _key.relin
             self._matcher.pyfhel[request.instrument] = _pyfhel
-            self._matcher.crypto[request.instrument] = CKKS(pyfhel=_pyfhel)
+            self._matcher.crypto[request.instrument] = CKKS(
+                pyfhel=_pyfhel, compress=self._compress
+            )
 
         return grpc_buffer.GetPublicKeyReply(public=_key.public)
 
@@ -117,7 +121,9 @@ class ExchangeServer(grpc_services.ExchangeProtoServicer):
             ),
         )
 
-        return grpc_buffer.AddOrderLimitReply(uuid=_order_book.add(order=request.order, matcher=self._matcher))
+        return grpc_buffer.AddOrderLimitReply(
+            uuid=_order_book.add(order=request.order, matcher=self._matcher)
+        )
 
     @route_logger(grpc_buffer.AddOrderLimitPlainReply)
     async def AddOrderLimitPlain(
@@ -211,6 +217,7 @@ async def serve(
     challenge_count: int,
     time_limit: Optional[int],
     delay_start: Optional[int],
+    compress: Optional[int],
 ) -> NoReturn:
     server = grpc.aio.server(
         options=[
@@ -247,6 +254,7 @@ async def serve(
             intermediate_port=intermediate_port,
             matcher=matcher,
             instruments=instruments,
+            compress=compress,
         )
 
         # Runs on the main child-process thread

@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 
-from typing import Union, Dict, List
+from typing import Union, Dict, List, Optional
 from dataclasses import dataclass
 import logging
 import time
@@ -10,7 +10,7 @@ import time
 from Pyfhel import Pyfhel, PyCtxt
 
 from pet_exchange.proto.intermediate_pb2 import PlaintextOrder, CiphertextOrder
-from pet_exchange.common.crypto import BFV, CKKS, BFV_PARAMETERS, CKKS_PARAMETERS
+from pet_exchange.common.crypto import CKKS, CKKS_PARAMETERS
 
 logger = logging.getLogger("__main__")
 
@@ -24,7 +24,7 @@ class KeyPair:
 
 
 class KeyHandler:
-    def __init__(self, instrument: str):
+    def __init__(self, instrument: str, compress: Optional[int] = None):
         self.instrument: str = instrument
         self.timings = {
             "TIME_TO_GENERATE_KEYS": None,
@@ -41,7 +41,7 @@ class KeyHandler:
 
         self._key_pair: KeyPair = None
         self._context = self.pyfhel.to_bytes_context()
-        self.crypto = CKKS(self.pyfhel)
+        self.crypto = CKKS(self.pyfhel, compress=compress)
 
     @property
     def key_pair(self) -> KeyPair:
@@ -155,13 +155,15 @@ class KeyEngine:
 
         return handler
 
-    def generate_key_handler(self, instrument: str) -> KeyHandler:
+    def generate_key_handler(
+        self, instrument: str, compress: Optional[int] = None
+    ) -> KeyHandler:
         try:
             return self.key_handler(instrument=instrument)
         except KeyError:
             logger.info(
                 f"Intermediate-Keys: Generating new key-pair for instrument: '{instrument}'"
             )
-            handler = KeyHandler(instrument=instrument)
+            handler = KeyHandler(instrument=instrument, compress=compress)
             self._save_key_handler(handler=handler, _skip_pre_check=True)
             return handler

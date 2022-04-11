@@ -27,7 +27,7 @@ from pet_exchange.common.utils import (
     generate_challenges,
 )
 from pet_exchange.common.types import OrderType
-from pet_exchange.common.crypto import BFV, CKKS
+from pet_exchange.common.crypto import CKKS
 from pet_exchange.utils.logging import TRADE_LOG_LEVEL
 
 logger = logging.getLogger("__main__")
@@ -143,33 +143,25 @@ class MatchingEngine:
             start_match_time = time.time()
 
             if hash(b_order.volume) not in crypto._depth_map:
-                b_order_volume = PyCtxt(
-                    serialized=b_order.volume, pyfhel=crypto._pyfhel
-                )
+                b_order_volume = crypto.from_bytes(ctxt=b_order.volume)
                 crypto._depth_map[hash(b_order_volume)] = 1
             else:
                 b_order_volume = b_order.volume
 
             if hash(b_order.price) not in crypto._depth_map:
-                b_order_price = PyCtxt(
-                    serialized=b_order.price, pyfhel=crypto._pyfhel
-                )
+                b_order_price = crypto.from_bytes(ctxt=b_order.price)
                 crypto._depth_map[hash(b_order_price)] = 1
             else:
                 b_order_price = b_order.price
 
             if hash(a_order.volume) not in crypto._depth_map:
-                a_order_volume = PyCtxt(
-                    serialized=a_order.volume, pyfhel=crypto._pyfhel
-                )
+                a_order_volume = crypto.from_bytes(ctxt=a_order.volume)
                 crypto._depth_map[hash(a_order_volume)] = 1
             else:
                 a_order_volume = a_order.volume
 
             if hash(a_order.price) not in crypto._depth_map:
-                a_order_price = PyCtxt(
-                    serialized=a_order.price, pyfhel=crypto._pyfhel
-                )
+                a_order_price = crypto.from_bytes(ctxt=a_order.price)
                 crypto._depth_map[hash(a_order_price)] = 1
             else:
                 a_order_price = a_order.price
@@ -178,9 +170,7 @@ class MatchingEngine:
             crypto._depth_map[hash(_price_pad)] = 1
 
             start_time = time.time()
-            b_otp_price = crypto.encrypt_add_plain_float(
-                b_order_price, _price_pad
-            )
+            b_otp_price = crypto.encrypt_add_plain_float(b_order_price, _price_pad)
             end_time = time.time()
             timings["TIME_TO_PAD_ORDER_PRICE_BID"].append(end_time - start_time)
 
@@ -240,9 +230,7 @@ class MatchingEngine:
                 )
                 break
             else:
-                _volume_pad = crypto.encode_float(
-                    values=[float(generate_random_int())]
-                )
+                _volume_pad = crypto.encode_float(values=[float(generate_random_int())])
                 crypto._depth_map[hash(_volume_pad)] = 1
 
                 start_time = time.time()
@@ -576,7 +564,6 @@ class MatchingEngine:
 
         return book, b_dropped, a_dropped
 
-
     def _match_orders(
         self,
         instrument: str,
@@ -601,7 +588,7 @@ class MatchingEngine:
                     correct_counter=correct_counter_bid,
                     total_counter=total_counter_bid,
                     total_timings=total_timings_bid,
-                )
+                ),
             )
             sort_bid_end = time.time()
             correct_counter_bid = sum(correct_counter_bid)
@@ -626,7 +613,6 @@ class MatchingEngine:
                 value={"type": "bid", "timings": total_timings_bid},
             )
 
-
             correct_counter_ask = []
             total_counter_ask = []
             total_timings_ask = []
@@ -643,7 +629,7 @@ class MatchingEngine:
                     correct_counter=correct_counter_ask,
                     total_counter=total_counter_ask,
                     total_timings=total_timings_ask,
-                )
+                ),
             )
             sort_ask_end = time.time()
             correct_counter_ask = sum(correct_counter_ask)
@@ -700,7 +686,7 @@ class MatchingEngine:
                 instrument=instrument,
                 book=book,
                 timings=timings,
-                remote_compare=not local_sort
+                remote_compare=not local_sort,
             )
 
         logger.info(
@@ -820,20 +806,20 @@ class MatchingEngine:
 
     def _compare_local(
         self,
-        first: Tuple[str, Union[
-            grpc_buffer.PlaintextLimitOrder, grpc_buffer.PlaintextMarketOrder
-        ]],
-        second: Tuple[str, Union[
-            grpc_buffer.PlaintextLimitOrder, grpc_buffer.PlaintextMarketOrder
-        ]],
+        first: Tuple[
+            str,
+            Union[grpc_buffer.PlaintextLimitOrder, grpc_buffer.PlaintextMarketOrder],
+        ],
+        second: Tuple[
+            str,
+            Union[grpc_buffer.PlaintextLimitOrder, grpc_buffer.PlaintextMarketOrder],
+        ],
         instrument: str,
         cache: Dict[Tuple[str, str], int],
         correct_counter: List[bool],
         total_counter: List[bool],
         total_timings: List[float],
-    ) -> Union[
-        grpc_buffer.PlaintextLimitOrder, grpc_buffer.PlaintextMarketOrder
-    ]:
+    ) -> Union[grpc_buffer.PlaintextLimitOrder, grpc_buffer.PlaintextMarketOrder]:
         """Compare two unencrypted items and return the smallest using the built in compare."""
         if (
             self.time_limit is not None
@@ -883,9 +869,7 @@ class MatchingEngine:
         correct_counter: List[bool],
         total_counter: List[bool],
         total_timings: List[float],
-    ) -> Union[
-        grpc_buffer.PlaintextLimitOrder, grpc_buffer.PlaintextMarketOrder
-    ]:
+    ) -> Union[grpc_buffer.PlaintextLimitOrder, grpc_buffer.PlaintextMarketOrder]:
         """Compare two items and return the smallest using the remote intermediate."""
         if (
             self.time_limit is not None
@@ -903,9 +887,7 @@ class MatchingEngine:
         if _cache_result is not None:
             return _cache_result
 
-        expected, challenges = generate_challenges(
-            engine=None, n=self.challenge_count
-        )
+        expected, challenges = generate_challenges(engine=None, n=self.challenge_count)
         index = randint(0, len(challenges) - 1) if len(challenges) > 0 else 0
         _challenges: List[ChallengePlain] = (
             challenges[:index]
@@ -926,9 +908,7 @@ class MatchingEngine:
             results.append(-1 if challenge.minimum else 1)
 
         if results != expected:
-            logger.error(
-                f"Intermediate returned wrong result for remote compare"
-            )
+            logger.error(f"Intermediate returned wrong result for remote compare")
 
         result = -1 if challenges[index].minimum else 1
 
@@ -944,20 +924,20 @@ class MatchingEngine:
 
     def _compare_local_encrypted(
         self,
-        first: Tuple[str, Union[
-            grpc_buffer.CiphertextLimitOrder, grpc_buffer.CiphertextMarketOrder
-        ]],
-        second: Tuple[str, Union[
-            grpc_buffer.CiphertextLimitOrder, grpc_buffer.CiphertextMarketOrder
-        ]],
+        first: Tuple[
+            str,
+            Union[grpc_buffer.CiphertextLimitOrder, grpc_buffer.CiphertextMarketOrder],
+        ],
+        second: Tuple[
+            str,
+            Union[grpc_buffer.CiphertextLimitOrder, grpc_buffer.CiphertextMarketOrder],
+        ],
         instrument: str,
         cache: Dict[Tuple[str, str], int],
         correct_counter: List[bool],
         total_counter: List[bool],
         total_timings: List[float],
-    ) -> Union[
-        grpc_buffer.CiphertextLimitOrder, grpc_buffer.CiphertextMarketOrder
-    ]:
+    ) -> Union[grpc_buffer.CiphertextLimitOrder, grpc_buffer.CiphertextMarketOrder]:
         """Compare two encrypted item and return the smallest using the local estimation.
         The identity of max(f, s) follows that:
         max(f, s) = ((f + s) / 2) + (abs(f - s) / 2) = ((f + s) / 2) + (sqrt((f - s)^2) / 2)
@@ -972,7 +952,9 @@ class MatchingEngine:
 
         first_identifier, first = first
         second_identifier, second = second
-        first, second = first.price, second.price
+        first, second = crypto.from_bytes(ctxt=first.price), crypto.from_bytes(
+            ctxt=second.price
+        )
 
         _cache_result = cache.get((first_identifier, second_identifier))
 
@@ -984,7 +966,7 @@ class MatchingEngine:
             """Scales down the value to the range [0, 1] using a given value l
             _a = 0.5 + (a / 2 ** l)
             """
-            denom = crypto.encode_float(values=[1 / (2 ** l)])
+            denom = crypto.encode_float(values=[1 / (2**l)])
             crypto.encrypt_mult_plain_float(
                 ciphertext=value, value=denom, to_bytes=False, new_ctxt=False
             )
@@ -1005,9 +987,7 @@ class MatchingEngine:
 
             return value
 
-        def compare(
-            first, second, iterations, sigmoid_iterations, constant_count
-        ):
+        def compare(first, second, iterations, sigmoid_iterations, constant_count):
             """Compare two values encrypted homomorphically and return result."""
             # x <- a - b
             # for i <- 1 to d do
@@ -1015,17 +995,15 @@ class MatchingEngine:
             # end for
             # return (x + 1) / 2
 
-            a = PyCtxt(serialized=first, pyfhel=crypto._pyfhel)
-            b = PyCtxt(serialized=second, pyfhel=crypto._pyfhel)
+            a = PyCtxt(copy_ctxt=first)
+            b = PyCtxt(copy_ctxt=second)
 
             crypto._depth_map[hash(a)] = 1
             crypto._depth_map[hash(b)] = 1
 
             def func(x, iterations, constant_index, _pre_calc):
                 _x = {1: PyCtxt(copy_ctxt=x)}
-                crypto._depth_map[
-                    hash(_x[1])
-                ] = crypto._depth_map[hash(x)]
+                crypto._depth_map[hash(_x[1])] = crypto._depth_map[hash(x)]
                 _sum = crypto.encrypt_float(value=0.0, to_bytes=False)
 
                 for i in range(1, iterations + 1, 2):
@@ -1053,9 +1031,7 @@ class MatchingEngine:
                     )
 
                     _x[i + 2] = PyCtxt(copy_ctxt=x)
-                    crypto._depth_map[
-                        hash(_x[i + 2])
-                    ] = crypto._depth_map[hash(x)]
+                    crypto._depth_map[hash(_x[i + 2])] = crypto._depth_map[hash(x)]
 
                 return _sum
 
@@ -1112,18 +1088,16 @@ class MatchingEngine:
                 ciphertext=x, value=half, to_bytes=False, new_ctxt=False
             )
 
-            half = crypto.encrypt_float(0.5)
+            half = crypto.encrypt_float(0.5, to_bytes=True)
             expected, challenges = generate_challenges(
                 engine=crypto, n=self.challenge_count
             )
-            index = (
-                randint(0, len(challenges) - 1) if len(challenges) > 0 else 0
-            )
+            index = randint(0, len(challenges) - 1) if len(challenges) > 0 else 0
             _challenges: List[Challenge] = (
                 challenges[:index]
                 + [
                     Challenge(
-                        first=x.to_bytes(),
+                        first=crypto.to_bytes(ctxt=x),
                         second=half,
                     )
                 ]
@@ -1168,7 +1142,6 @@ class MatchingEngine:
         total_timings.append(end_compare - start_compare)
         return result
 
-
     def _compare_remote_encrypted(
         self,
         first: Tuple[str, grpc_buffer.CiphertextLimitOrder],
@@ -1178,9 +1151,7 @@ class MatchingEngine:
         correct_counter: List[bool],
         total_counter: List[bool],
         total_timings: List[float],
-    ) -> Union[
-        grpc_buffer.CiphertextLimitOrder, grpc_buffer.CiphertextMarketOrder
-    ]:
+    ) -> Union[grpc_buffer.CiphertextLimitOrder, grpc_buffer.CiphertextMarketOrder]:
         """Compare two encrypted item and return the smallest using the remote intermediate."""
         if (
             self.time_limit is not None
@@ -1192,7 +1163,9 @@ class MatchingEngine:
 
         first_identifier, first = first
         second_identifier, second = second
-        first, second = first.price, second.price
+        first, second = crypto.from_bytes(ctxt=first.price), crypto.from_bytes(
+            ctxt=second.price
+        )
 
         _cache_result = cache.get((first_identifier, second_identifier))
 
@@ -1208,8 +1181,8 @@ class MatchingEngine:
             challenges[:index]
             + [
                 Challenge(
-                    first=first,
-                    second=second,
+                    first=crypto.to_bytes(ctxt=first),
+                    second=crypto.to_byte(ctxt=second),
                 )
             ]
             + challenges[index:]
@@ -1228,9 +1201,7 @@ class MatchingEngine:
             results.append(-1 if challenge.minimum else 1)
 
         if results != expected:
-            logger.error(
-                f"Intermediate returned wrong result for remote compare"
-            )
+            logger.error(f"Intermediate returned wrong result for remote compare")
 
         result = -1 if challenges[index].minimum else 1
 
@@ -1258,7 +1229,7 @@ class MatchingEngine:
         """Continously match incoming orders against each other
         Runs the sub matchers _match and _match_plaintext depending on if the orders are encrypted
         """
-        with ThreadPoolExecutor(max_workers=10) as pool:
+        with ThreadPoolExecutor(max_workers=20) as pool:
             while True:
                 try:
                     future_to_match: Dict[Future, str] = {}
@@ -1285,7 +1256,9 @@ class MatchingEngine:
                         try:
                             other_book, b_dropped, a_dropped = future.result()
 
-                            self.book[instrument].merge(other_book, b_dropped, a_dropped)
+                            self.book[instrument].merge(
+                                other_book, b_dropped, a_dropped
+                            )
                             if self.output is not None:
                                 self._write_output(instrument)
                         except StopIteration:

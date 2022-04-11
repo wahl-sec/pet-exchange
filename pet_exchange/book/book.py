@@ -84,7 +84,7 @@ class OrderBook:
             grpc_buffer.CiphertextMarketOrder,
             grpc_buffer.PlaintextMarketOrder,
         ],
-        matcher: Any
+        matcher: Any,
     ):
         # bisect https://github.com/python/cpython/blob/3.10/Lib/bisect.py
         while self._locked_bid:
@@ -100,7 +100,15 @@ class OrderBook:
             except IndexError as e:
                 print("BID", mid, lo, hi, len(list(self._book_bid.items())))
                 raise e
-            result = matcher.compare_fn(first=(_identifier, _order), second=(identifier, order), instrument=self._instrument, cache=self._book_bid_compared, correct_counter=[], total_counter=[], total_timings=[])
+            result = matcher.compare_fn(
+                first=(_identifier, _order),
+                second=(identifier, order),
+                instrument=self._instrument,
+                cache=self._book_bid_compared,
+                correct_counter=[],
+                total_counter=[],
+                total_timings=[],
+            )
 
             if result == -1:
                 hi = mid
@@ -123,7 +131,7 @@ class OrderBook:
             grpc_buffer.CiphertextMarketOrder,
             grpc_buffer.PlaintextMarketOrder,
         ],
-        matcher: Any
+        matcher: Any,
     ):
         while self._locked_ask:
             pass
@@ -139,7 +147,15 @@ class OrderBook:
                 print("ASK", mid, lo, hi, len(list(self._book_ask.items())))
                 raise e
             _identifier, _order = list(self._book_ask.items())[mid]
-            result = matcher.compare_fn(first=(identifier, order), second=(_identifier, _order), instrument=self._instrument, cache=self._book_bid_compared, correct_counter=[], total_counter=[], total_timings=[])
+            result = matcher.compare_fn(
+                first=(identifier, order),
+                second=(_identifier, _order),
+                instrument=self._instrument,
+                cache=self._book_bid_compared,
+                correct_counter=[],
+                total_counter=[],
+                total_timings=[],
+            )
 
             if result == -1:
                 hi = mid
@@ -179,7 +195,7 @@ class OrderBook:
             grpc_buffer.CiphertextMarketOrder,
             grpc_buffer.PlaintextMarketOrder,
         ],
-        matcher: Any
+        matcher: Any,
     ):
         """Add an order to the order book, the order is sorted into the book of the given type."""
         _identifier = generate_identifier()

@@ -32,10 +32,12 @@ class IntermediateServer(grpc_services.IntermediateProtoServicer):
         intermediate_output: str,
         instruments: List[str],
         encrypted: str,
+        compress: Optional[int] = None,
     ):
         self.listen_addr = listen_addr
         self.output = intermediate_output
         self._exchange_host, self._exchange_port = (exchange_host, exchange_port)
+        self._compress = compress
 
         self._exchange_channel = grpc.aio.insecure_channel(
             f"{self._exchange_host}:{self._exchange_port}",
@@ -53,7 +55,9 @@ class IntermediateServer(grpc_services.IntermediateProtoServicer):
         if encrypted:
             self._key_engine = KeyEngine()
             for instrument in instruments:
-                self._key_engine.generate_key_handler(instrument=instrument)
+                self._key_engine.generate_key_handler(
+                    instrument=instrument, compress=compress
+                )
 
         super(grpc_services.IntermediateProtoServicer).__init__()
 
@@ -61,7 +65,9 @@ class IntermediateServer(grpc_services.IntermediateProtoServicer):
     async def KeyGen(
         self, request: grpc_buffer.KeyGenRequest, context: grpc.aio.ServicerContext
     ) -> grpc_buffer.KeyGenReply:
-        handler = self._key_engine.generate_key_handler(instrument=request.instrument)
+        handler = self._key_engine.generate_key_handler(
+            instrument=request.instrument, compress=self._compress
+        )
         self._write_output(instrument=request.instrument)
         return grpc_buffer.KeyGenReply(
             context=handler.key_pair.context,
@@ -137,7 +143,11 @@ class IntermediateServer(grpc_services.IntermediateProtoServicer):
             future_to_challenges: Dict[Future, int] = {}
             for index, challenge in enumerate(request.challenges):
                 future_to_challenges[
-                    pool.submit(compare, first=challenge.first, second=challenge.second)
+                    pool.submit(
+                        compare,
+                        first=handler.crypto.from_bytes(ctxt=challenge.first),
+                        second=handler.crypto.from_bytes(ctxt=challenge.second),
+                    )
                 ] = index
 
             for future in as_completed(future_to_challenges):
@@ -205,6 +215,7 @@ async def serve(
     intermediate_output: str,
     encrypted: Optional[str],
     instruments: List[str],
+    compress: Optional[int] = None,
 ) -> NoReturn:
     server = grpc.aio.server(
         options=[
@@ -222,6 +233,7 @@ async def serve(
             intermediate_output=intermediate_output,
             instruments=instruments,
             encrypted=encrypted,
+            compress=compress,
         ),
         server,
     )
