@@ -132,12 +132,9 @@ METRICS_STRUCTURE = {
     "TOTAL_ORDERS_EXECUTED": None,
     "FIRST_ORDER_SUBMITTED_DATE": None,
     "LAST_ORDER_SUBMITTED_DATE": None,
-    "MAX_TIME_TO_COMPLETION": None,
-    "MAX_TIME_TO_COMPLETION_BID": None,
-    "MAX_TIME_TO_COMPLETION_ASK": None,
-    "MIN_TIME_TO_COMPLETION": None,
-    "MIN_TIME_TO_COMPLETION_BID": None,
-    "MIN_TIME_TO_COMPLETION_ASK": None,
+    "TOTAL_TIME_TO_SORT": None,
+    "TOTAL_TIME_TO_SORT_BID": None,
+    "TOTAL_TIME_TO_SORT_ASK": None,
     "MAX_TIME_TO_SORT": None,
     "MAX_TIME_TO_SORT_BID": None,
     "MAX_TIME_TO_SORT_ASK": None,
@@ -147,9 +144,31 @@ METRICS_STRUCTURE = {
     "AVERAGE_TIME_TO_SORT": None,
     "AVERAGE_TIME_TO_SORT_BID": None,
     "AVERAGE_TIME_TO_SORT_ASK": None,
+    "MAX_TIME_TO_COMPLETION": None,
+    "MAX_TIME_TO_COMPLETION_BID": None,
+    "MAX_TIME_TO_COMPLETION_ASK": None,
+    "MIN_TIME_TO_COMPLETION": None,
+    "MIN_TIME_TO_COMPLETION_BID": None,
+    "MIN_TIME_TO_COMPLETION_ASK": None,
     "AVERAGE_TIME_TO_COMPLETION": None,
     "AVERAGE_TIME_TO_COMPLETION_BID": None,
     "AVERAGE_TIME_TO_COMPLETION_ASK": None,
+    "TOTAL_TIME_TO_MATCH_ORDER": None,
+    "MAX_TIME_TO_MATCH_ORDER": None,
+    "MIN_TIME_TO_MATCH_ORDER": None,
+    "AVERAGE_TIME_TO_MATCH_ORDER": None,
+    "MAX_TIME_TO_DECRYPT_ORDER": None,
+    "MAX_TIME_TO_DECRYPT_ORDER_BID": None,
+    "MAX_TIME_TO_DECRYPT_ORDER_ASK": None,
+    "MIN_TIME_TO_DECRYPT_ORDER": None,
+    "MIN_TIME_TO_DECRYPT_ORDER_BID": None,
+    "MIN_TIME_TO_DECRYPT_ORDER_ASK": None,
+    "AVERAGE_TIME_TO_DECRYPT_ORDER": None,
+    "AVERAGE_TIME_TO_DECRYPT_ORDER_BID": None,
+    "AVERAGE_TIME_TO_DECRYPT_ORDER_ASK": None,
+    "MAX_TIME_TO_GENERATE_CHALLENGES": None,
+    "MIN_TIME_TO_GENERATE_CHALLENGES": None,
+    "AVERAGE_TIME_TO_GENERATE_CHALLENGES": None,
     "TOTAL_VOLUME_SUBMITTED": None,
     "TOTAL_VOLUME_SUBMITTED_BID": None,
     "TOTAL_VOLUME_SUBMITTED_ASK": None,
@@ -935,6 +954,8 @@ def create_report(
         time_sort_ask: List[float] = []
         time_sort_orders_bid: List[float] = []
         time_sort_orders_ask: List[float] = []
+        time_insert_orders_bid: List[float] = []
+        time_insert_orders_ask: List[float] = []
         time_match_orders: List[float] = []
         time_decrypt_orders: List[float] = []
         time_generate_challenges: List[float] = []
@@ -960,6 +981,9 @@ def create_report(
                     elif section_name == "orders":
                         _bid_list = time_sort_orders_bid
                         _ask_list = time_sort_orders_ask
+                    elif section_name == "insert":
+                        _bid_list = time_insert_orders_bid
+                        _ask_list = time_insert_orders_ask
                 elif category_name == "match":
                     if section_name == "pairs":
                         _bid_list = time_match_orders
@@ -1059,6 +1083,9 @@ def create_report(
                 / len(time_completion_ask)
                 if time_completion_ask
                 else None,
+                "TOTAL_TIME_TO_SORT": sum(time_sort_bid + time_sort_ask),
+                "TOTAL_TIME_TO_SORT_BID": sum(time_sort_bid),
+                "TOTAL_TIME_TO_SORT_ASK": sum(time_sort_ask),
                 "MAX_TIME_TO_SORT": max(time_sort_bid + time_sort_ask)
                 if time_sort_bid or time_sort_ask
                 else None,
@@ -1081,9 +1108,52 @@ def create_report(
                 "AVERAGE_TIME_TO_SORT_ASK": (sum(time_sort_ask) / len(time_sort_ask))
                 if time_sort_ask
                 else None,
+                "TOTAL_TIME_TO_INSERT_ORDERS": sum(
+                    time_insert_orders_bid + time_insert_orders_ask
+                ),
+                "TOTAL_TIME_TO_INSERT_ORDERS_BID": sum(time_insert_orders_bid),
+                "TOTAL_TIME_TO_INSERT_ORDERS_ASK": sum(time_insert_orders_ask),
                 "TOTAL_VOLUME_SUBMITTED": sum(
                     [_order["volume"] for _order in all_orders.values()]
                 ),
+                "MAX_TIME_TO_INSERT_ORDERS": max(
+                    time_insert_orders_bid + time_insert_orders_ask
+                )
+                if time_insert_orders_bid or time_insert_orders_ask
+                else None,
+                "MAX_TIME_TO_INSERT_ORDERS_BID": max(time_insert_orders_bid)
+                if time_insert_orders_bid
+                else None,
+                "MAX_TIME_TO_INSERT_ORDERS_ASK": max(time_insert_orders_ask)
+                if time_insert_orders_ask
+                else None,
+                "MIN_TIME_TO_INSERT_ORDERS": min(
+                    time_insert_orders_bid + time_insert_orders_ask
+                )
+                if time_insert_orders_bid or time_insert_orders_ask
+                else None,
+                "MIN_TIME_TO_INSERT_ORDERS_BID": min(time_insert_orders_bid)
+                if time_insert_orders_bid
+                else None,
+                "MIN_TIME_TO_INSERT_ORDERS_ASK": min(time_insert_orders_ask)
+                if time_insert_orders_ask
+                else None,
+                "AVERAGE_TIME_TO_INSERT_ORDERS": (
+                    sum(time_insert_orders_bid + time_insert_orders_ask)
+                    / (len(time_insert_orders_bid) + len(time_insert_orders_ask))
+                )
+                if time_insert_orders_bid or time_insert_orders_ask
+                else None,
+                "AVERAGE_TIME_TO_INSERT_ORDERS_BID": (
+                    sum(time_insert_orders_bid) / (len(time_insert_orders_bid))
+                )
+                if time_insert_orders_bid
+                else None,
+                "AVERAGE_TIME_TO_INSERT_ORDERS_ASK": (
+                    sum(time_insert_orders_ask) / (len(time_insert_orders_ask))
+                )
+                if time_insert_orders_ask
+                else None,
                 "TOTAL_VOLUME_SUBMITTED_BID": sum(
                     [
                         _order["volume"]
@@ -1290,6 +1360,7 @@ def create_report(
                     ]
                 )
                 else None,
+                "TOTAL_TIME_TO_MATCH_ORDER": sum(time_match_orders),
                 "MAX_TIME_TO_MATCH_ORDER": max(time_match_orders)
                 if time_match_orders
                 else None,
@@ -1323,6 +1394,9 @@ def create_report(
                 )
                 if time_generate_challenges
                 else None,
+                "TOTAL_TIME_TO_GET_MINIMUM_PRICE": sum(time_get_minimum_price)
+                if time_get_minimum_price
+                else None,
                 "MAX_TIME_TO_GET_MINIMUM_PRICE": max(time_get_minimum_price)
                 if time_get_minimum_price
                 else None,
@@ -1333,6 +1407,9 @@ def create_report(
                     sum(time_get_minimum_price) / (len(time_get_minimum_price))
                 )
                 if time_get_minimum_price
+                else None,
+                "TOTAL_TIME_TO_GET_MINIMUM_VOLUME": sum(time_get_minimum_volume)
+                if time_get_minimum_volume
                 else None,
                 "MAX_TIME_TO_GET_MINIMUM_VOLUME": max(time_get_minimum_volume)
                 if time_get_minimum_volume

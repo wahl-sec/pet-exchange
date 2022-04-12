@@ -64,7 +64,9 @@ async def client(
     _start: Optional[int] = None,
     static_offset: Optional[float] = None,
     run_forever: bool = False,
+    encrypt_entity: bool = False,
     compress: Optional[int] = None,
+    precision: Optional[int] = None,
 ) -> NoReturn:
     host, port = exchange
     listen_addr = f"{host}:{port}"
@@ -179,6 +181,29 @@ async def client(
 
                     keys[order["instrument"]] = (_pyfhel, crypto)
 
+                if not isinstance(order["price"], float):
+                    order["price"] = float(order["price"])
+
+                if not isinstance(order["volume"], float):
+                    order["volume"] = float(order["volume"])
+
+                if precision is not None:
+                    _len = int(len(str(order["price"]).split(".")[-1]))
+                    if _len > precision:
+                        _price = round(order["price"], precision)
+                        logger.warning(
+                            f"Order price: '{order['price']}' ({_len}) rounded off to '{_price}' ({precision})"
+                        )
+                        order["price"] = _price
+
+                    _len = int(len(str(order["volume"]).split(".")[-1]))
+                    if _len > precision:
+                        _volume = round(order["volume"], precision)
+                        logger.warning(
+                            f"Order volume: '{order['volume']}' ({_len}) rounded off to '{_volume}' ({precision})"
+                        )
+                        order["volume"] = _volume
+
                 if encrypted is not None:
                     _, crypto = keys[order["instrument"]]
                     start_time = time.time()
@@ -186,7 +211,9 @@ async def client(
                         **{
                             "instrument": order["instrument"],
                             "type": order["type"],
-                            "entity": crypto.encrypt_string(client),
+                            "entity": crypto.encrypt_string(client)
+                            if encrypt_entity
+                            else client.encode("utf-8"),
                             "volume": crypto.encrypt_float(
                                 value=float(order["volume"])
                             ),
@@ -229,7 +256,7 @@ async def client(
                     if _start is not None:
                         _start = time.time()
 
-                metrics["SIZE_OF_ORDER"].append(sys.getsizeof(_processed_order))
+                metrics["SIZE_OF_ORDER"].append(_processed_order.ByteSize())
                 try:
                     start_time = time.time()
                     response = await _message(_request(order=_processed_order))

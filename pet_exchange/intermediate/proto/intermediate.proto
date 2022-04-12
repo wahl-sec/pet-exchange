@@ -67,7 +67,7 @@ message PlaintextOrder {
     OrderType type = 1;
     string instrument = 2;
     string entity = 3;
-    uint32 volume = 4;
+    double volume = 4;
     double price = 5;
 }
 

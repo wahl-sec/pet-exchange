@@ -24,8 +24,14 @@ class KeyPair:
 
 
 class KeyHandler:
-    def __init__(self, instrument: str, compress: Optional[int] = None):
+    def __init__(
+        self,
+        instrument: str,
+        compress: Optional[int] = None,
+        precision: Optional[int] = None,
+    ):
         self.instrument: str = instrument
+        self.precision: Optional[int] = precision
         self.timings = {
             "TIME_TO_GENERATE_KEYS": None,
             "TIME_TO_GENERATE_RELIN_KEYS": None,
@@ -97,11 +103,16 @@ class KeyHandler:
 
         Raises `ValueError` if the key-pair is not initialized yet
         """
+        _price = self.crypto.decrypt_float(ciphertext.price)
+        _volume = self.crypto.decrypt_float(ciphertext.volume)
+
         return PlaintextOrder(
             type=ciphertext.type,
             instrument=ciphertext.instrument,
-            volume=round(self.crypto.decrypt_float(ciphertext.volume)),
-            price=round(self.crypto.decrypt_float(ciphertext.price), 2),
+            volume=_volume
+            if self.precision is None
+            else round(_volume, self.precision),
+            price=_price if self.precision is None else round(_price, self.precision),
         )
 
 
@@ -156,7 +167,10 @@ class KeyEngine:
         return handler
 
     def generate_key_handler(
-        self, instrument: str, compress: Optional[int] = None
+        self,
+        instrument: str,
+        compress: Optional[int] = None,
+        precision: Optional[int] = None,
     ) -> KeyHandler:
         try:
             return self.key_handler(instrument=instrument)
@@ -164,6 +178,8 @@ class KeyEngine:
             logger.info(
                 f"Intermediate-Keys: Generating new key-pair for instrument: '{instrument}'"
             )
-            handler = KeyHandler(instrument=instrument, compress=compress)
+            handler = KeyHandler(
+                instrument=instrument, compress=compress, precision=precision
+            )
             self._save_key_handler(handler=handler, _skip_pre_check=True)
             return handler

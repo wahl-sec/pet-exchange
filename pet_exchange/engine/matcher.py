@@ -334,6 +334,10 @@ class MatchingEngine:
                 end_time = time.time()
                 timings["TIME_TO_DECRYPT_ORDER"].append(end_time - start_time)
 
+                print(
+                    f"(A PRICE: {d_order.order.price}, A VOL: {d_order.order.volume})"
+                )
+
                 book.add_performed(
                     ask_identifier=a_identifier,
                     bid_identifier=b_identifier,
@@ -576,6 +580,8 @@ class MatchingEngine:
         total_counter_bid = []
         total_timings_bid = []
 
+        start_matching_time = time.time()
+
         if not book.sorted:
             sort_bid_start = time.time()
             book.sort(
@@ -801,6 +807,8 @@ class MatchingEngine:
                 "timings": timings["TIME_TO_UNPAD_ORDER_VOLUME_ASK"],
             },
         )
+
+        print(time.time() - start_matching_time)
 
         return result
 
@@ -1182,7 +1190,7 @@ class MatchingEngine:
             + [
                 Challenge(
                     first=crypto.to_bytes(ctxt=first),
-                    second=crypto.to_byte(ctxt=second),
+                    second=crypto.to_bytes(ctxt=second),
                 )
             ]
             + challenges[index:]
@@ -1229,7 +1237,7 @@ class MatchingEngine:
         """Continously match incoming orders against each other
         Runs the sub matchers _match and _match_plaintext depending on if the orders are encrypted
         """
-        with ThreadPoolExecutor(max_workers=20) as pool:
+        with ThreadPoolExecutor(max_workers=10) as pool:
             while True:
                 try:
                     future_to_match: Dict[Future, str] = {}

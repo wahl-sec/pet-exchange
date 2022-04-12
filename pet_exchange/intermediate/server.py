@@ -32,12 +32,16 @@ class IntermediateServer(grpc_services.IntermediateProtoServicer):
         intermediate_output: str,
         instruments: List[str],
         encrypted: str,
+        encrypt_entity: bool,
         compress: Optional[int] = None,
+        precision: Optional[int] = None,
     ):
         self.listen_addr = listen_addr
         self.output = intermediate_output
         self._exchange_host, self._exchange_port = (exchange_host, exchange_port)
         self._compress = compress
+        self._precision = precision
+        self._encrypt_entity = encrypt_entity
 
         self._exchange_channel = grpc.aio.insecure_channel(
             f"{self._exchange_host}:{self._exchange_port}",
@@ -56,7 +60,7 @@ class IntermediateServer(grpc_services.IntermediateProtoServicer):
             self._key_engine = KeyEngine()
             for instrument in instruments:
                 self._key_engine.generate_key_handler(
-                    instrument=instrument, compress=compress
+                    instrument=instrument, compress=compress, precision=precision
                 )
 
         super(grpc_services.IntermediateProtoServicer).__init__()
@@ -66,7 +70,9 @@ class IntermediateServer(grpc_services.IntermediateProtoServicer):
         self, request: grpc_buffer.KeyGenRequest, context: grpc.aio.ServicerContext
     ) -> grpc_buffer.KeyGenReply:
         handler = self._key_engine.generate_key_handler(
-            instrument=request.instrument, compress=self._compress
+            instrument=request.instrument,
+            compress=self._compress,
+            precision=self._precision,
         )
         self._write_output(instrument=request.instrument)
         return grpc_buffer.KeyGenReply(
@@ -107,10 +113,18 @@ class IntermediateServer(grpc_services.IntermediateProtoServicer):
         handler = self._key_engine.key_handler(instrument=request.order.instrument)
         return grpc_buffer.DecryptOrderReply(
             order=handler.decrypt(ciphertext=request.order),
-            entity_bid=handler.crypto.decrypt_string(request.entity_bid)
+            entity_bid=(
+                handler.crypto.decrypt_string(request.entity_bid)
+                if self._encrypt_entity
+                else request.entity_bid
+            )
             if hasattr(request, "entity_bid")
             else None,
-            entity_ask=handler.crypto.decrypt_string(request.entity_ask)
+            entity_ask=(
+                handler.crypto.decrypt_string(request.entity_ask)
+                if self._encrypt_entity
+                else request.entity_ask
+            )
             if hasattr(request, "entity_ask")
             else None,
         )
@@ -215,7 +229,9 @@ async def serve(
     intermediate_output: str,
     encrypted: Optional[str],
     instruments: List[str],
+    encrypt_entity: bool,
     compress: Optional[int] = None,
+    precision: Optional[int] = None,
 ) -> NoReturn:
     server = grpc.aio.server(
         options=[
@@ -234,6 +250,8 @@ async def serve(
             instruments=instruments,
             encrypted=encrypted,
             compress=compress,
+            precision=precision,
+            encrypt_entity=encrypt_entity,
         ),
         server,
     )

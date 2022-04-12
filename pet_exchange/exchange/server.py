@@ -37,6 +37,7 @@ class ExchangeServer(grpc_services.ExchangeProtoServicer):
         matcher: MatchingEngine,
         instruments: List[str],
         compress: Optional[int] = None,
+        precision: Optional[int] = None,
     ):
         self.listen_addr = listen_addr
         self._intermediate_host, self._intermediate_port = (
@@ -46,6 +47,7 @@ class ExchangeServer(grpc_services.ExchangeProtoServicer):
         self._instruments = instruments
         self._matcher = matcher
         self._compress = compress
+        self._precision = precision
 
         self._intermediate_channel = ExchangeClient(
             listen_addr=self.listen_addr,
@@ -218,6 +220,7 @@ async def serve(
     time_limit: Optional[int],
     delay_start: Optional[int],
     compress: Optional[int],
+    precision: Optional[int],
 ) -> NoReturn:
     server = grpc.aio.server(
         options=[
@@ -255,6 +258,7 @@ async def serve(
             matcher=matcher,
             instruments=instruments,
             compress=compress,
+            precision=precision,
         )
 
         # Runs on the main child-process thread

@@ -13,9 +13,9 @@ import numpy as np
 # scale - scaling factor - defines encoding precision for the binary representation of coefficients, bigger is better (precision), bigger is worse (performance?)`
 CKKS_PARAMETERS = {
     "n": 2**14,
-    "qs": [42] + [32] * 6,
+    "qs": [52] + [45] * 6,
     # "qs": [24] + [23] * 18,
-    "scale": 2**32,
+    "scale": 2**45,
 }
 
 # Max qs for 2 ** 14 is 438

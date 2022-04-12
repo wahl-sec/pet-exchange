@@ -52,7 +52,8 @@ SERVER_VARIABLES = {
         "exchange_challenge_count",
         "exchange_time_limit",
         "exchange_delay_start",
-        "compress",
+        "orders_compress",
+        "orders_precision",
     ],
     "intermediate": [
         "intermediate_host",
@@ -62,7 +63,9 @@ SERVER_VARIABLES = {
         "exchange_port",
         "plaintext",
         "cryptographic",
-        "compress",
+        "orders_compress",
+        "orders_precision",
+        "orders_encrypt_entity",
     ],
 }
 
@@ -107,7 +110,9 @@ def _start_client(parameters: Dict[str, Any]) -> NoReturn:
                 exchange_order_type=_kwargs["EXCHANGE_ORDER_TYPE"],
                 static_offset=_kwargs["CLIENT_STATIC_OFFSET"],
                 run_forever=_kwargs["CLIENT_RUN_FOREVER"],
-                compress=_kwargs["COMPRESS"],
+                compress=_kwargs["ORDERS_COMPRESS"],
+                precision=_kwargs["ORDERS_PRECISION"],
+                encrypt_entity=_kwargs["ORDERS_ENCRYPT_ENTITY"],
                 _start=None if not _kwargs["USE_OFFSET"] else _start,
             )
         )
@@ -144,7 +149,9 @@ def _resolve_client_information_files(args) -> Dict[str, Dict[str, Any]]:
                     "USE_OFFSET": args.client_offset,
                     "CLIENT_STATIC_OFFSET": args.client_static_offset,
                     "CLIENT_RUN_FOREVER": args.client_run_forever,
-                    "COMPRESS": args.compress,
+                    "ORDERS_COMPRESS": args.orders_compress,
+                    "ORDERS_PRECISION": args.orders_precision,
+                    "ORDERS_ENCRYPT_ENTITY": args.orders_encrypt_entity,
                     "EXCHANGE_ORDER_TYPE": args.client_order_type
                     if args.client_order_type
                     else (
@@ -233,6 +240,10 @@ async def start(args: Namespace):
                 )
                 del _servers[arg]["plaintext"]
                 del _servers[arg]["cryptographic"]
+                _servers[arg]["compress"] = _servers[arg]["orders_compress"]
+                del _servers[arg]["orders_compress"]
+                _servers[arg]["precision"] = _servers[arg]["orders_precision"]
+                del _servers[arg]["orders_precision"]
 
                 if _component == "exchange":
                     _servers[arg]["local_sort"] = _servers[arg]["exchange_local_sort"]
@@ -257,6 +268,11 @@ async def start(args: Namespace):
                     del _servers[arg]["exchange_time_limit"]
                     _servers[arg]["delay_start"] = _servers[arg]["exchange_delay_start"]
                     del _servers[arg]["exchange_delay_start"]
+                elif _component == "intermediate":
+                    _servers[arg]["encrypt_entity"] = _servers[arg][
+                        "orders_encrypt_entity"
+                    ]
+                    del _servers[arg]["orders_encrypt_entity"]
 
             pool.map(
                 _start_server,
@@ -300,12 +316,27 @@ if __name__ == "__main__":
         help="Run the exchange in cryptographic mode",
         action="store_true",
     )
-    parser.add_argument(
-        "-z",
-        "--compress",
+
+    orders = parser.add_argument_group("Orders")
+    orders.add_argument(
+        "-o:c",
+        "--orders-compress",
         help="Compress orders using 'zlib', define the level to use from 0-9, defaults to no comression",
         type=int,
         default=None,
+    )
+    orders.add_argument(
+        "-o:p",
+        "--orders-precision",
+        help="Number of decimal points to round off to, i.e what precision to allows orders to be up to, any order exceeding the precision will be rounded off, defaults to no limit",
+        type=int,
+        default=None,
+    )
+    orders.add_argument(
+        "-o:ee",
+        "--orders-encrypt-entity",
+        help="If the entity name should be encrypted or not, defaults to not encrypted",
+        action="store_true",
     )
 
     exchange = parser.add_argument_group("Exchange")

@@ -4,6 +4,7 @@
 from typing import NoReturn, Union, List, Dict, Generator, Any, Optional, Callable
 import functools
 import logging
+import time
 
 import pet_exchange.proto.exchange_pb2 as grpc_buffer
 import pet_exchange.proto.exchange_pb2_grpc as grpc_services
@@ -41,6 +42,8 @@ class OrderBook:
         self._book_bid_compared: Dict[Tuple[str, str], bool] = {}
         self._book_ask_compared: Dict[Tuple[str, str], bool] = {}
         self._instrument = instrument
+
+        # Setting this to True will disable sorting essentially since we use binary search to insert on add
         self.sorted = True
         self._locked_bid = False
         self._locked_ask = False
@@ -90,6 +93,7 @@ class OrderBook:
         while self._locked_bid:
             pass
 
+        start_time_to_insert = time.time()
         self._locked_bid = True
         lo = 0
         hi = len(self._book_bid)
@@ -118,6 +122,16 @@ class OrderBook:
         __book = list(self._book_bid.items())
         __book.insert(lo, (identifier, order))
         self._book_bid = dict(__book)
+        end_time_to_insert = time.time()
+        self.add_metrics(
+            category="sorting",
+            section="insert",
+            value={
+                "type": "bid",
+                "timings": [end_time_to_insert - start_time_to_insert],
+            },
+        )
+
         self._locked_bid = False
 
         # self._book_bid[identifier] = order
@@ -136,6 +150,7 @@ class OrderBook:
         while self._locked_ask:
             pass
 
+        start_time_to_insert = time.time()
         self._locked_ask = True
         # bisect https://github.com/python/cpython/blob/3.10/Lib/bisect.py
         lo = 0
@@ -165,6 +180,15 @@ class OrderBook:
         __book = list(self._book_ask.items())
         __book.insert(lo, (identifier, order))
         self._book_ask = dict(__book)
+        end_time_to_insert = time.time()
+        self.add_metrics(
+            category="sorting",
+            section="insert",
+            value={
+                "type": "ask",
+                "duration": end_time_to_insert - start_time_to_insert,
+            },
+        )
 
         self._locked_ask = False
         # self._book_ask[identifier] = order
