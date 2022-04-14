@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Tuple
 from argparse import ArgumentParser
 from pathlib import Path
 import json
@@ -87,6 +87,7 @@ def validate_executed(
 
         total_orders: Dict[str, Any] = {}
         total_orders_results: Dict[str, bool] = {}
+        total_orders_results_price: Dict[str, Tuple[bool, float]] = {}
 
         with _path_client.open(mode="r") as client_file:
             client_file_json = json.load(client_file)
@@ -94,6 +95,7 @@ def validate_executed(
                 for identifier, order in orders.items():
                     total_orders[identifier] = order
                     total_orders_results[identifier] = True
+                    total_orders_results_price[identifier] = (True, 1.0)
 
             print(f"Validating exchange for executed orders for clients")
             for instrument, struct in exchange_file_json.items():
@@ -142,8 +144,17 @@ def validate_executed(
                             f"Executed order: '{executed_identifier}' performed price: ({executed_order['performed']['price']}) was not the ASK price: ({total_orders[executed_order['references']['ask']]['price']}) for order: '{executed_order['references']['ask']}'"
                         )
                         total_orders_results[
-                            executed_order["references"][order_type]
+                            executed_order["references"]["ask"]
                         ] = False
+                        total_orders_results_price[
+                            executed_order["references"]["ask"]
+                        ] = (
+                            False,
+                            executed_order["performed"]["price"]
+                            / total_orders[executed_order["references"]["ask"]][
+                                "price"
+                            ],
+                        )
                         continue
 
                     if (
@@ -154,13 +165,40 @@ def validate_executed(
                             f"Executed order: '{executed_identifier}' performed price: ({executed_order['performed']['price']}) was greater than the BID price: ({total_orders[executed_order['references']['bid']]['price']}) for order: '{executed_order['references']['bid']}'"
                         )
                         total_orders_results[
-                            executed_order["references"][order_type]
+                            executed_order["references"]["bid"]
                         ] = False
+                        total_orders_results_price[
+                            executed_order["references"]["bid"]
+                        ] = (
+                            False,
+                            executed_order["performed"]["price"]
+                            / total_orders[executed_order["references"]["bid"]][
+                                "price"
+                            ],
+                        )
                         continue
 
-    print(
-        f"Correct Count: ({len(list(filter(lambda _: _, total_orders_results.values())))}), Wrong Count: ({len(list(filter(lambda _: not _, total_orders_results.values())))})"
+    correct_ratio = len(list(filter(lambda _: _, total_orders_results.values()))) / len(
+        total_orders_results
     )
+
+    wrong_ratio = len(
+        list(filter(lambda _: not _, total_orders_results.values()))
+    ) / len(total_orders_results)
+    avg_deviation_price = sum(
+        [
+            _[1]
+            for _ in list(
+                filter(lambda _: not _[0], total_orders_results_price.values())
+            )
+        ]
+    ) / len(list(filter(lambda _: not _[0], total_orders_results_price.values())))
+
+    print(
+        f"Correct Count: ({len(list(filter(lambda _: _, total_orders_results.values())))}) ({correct_ratio * 100}%), Wrong Count: ({len(list(filter(lambda _: not _, total_orders_results.values())))}) ({wrong_ratio * 100}%)"
+    )
+
+    print(f"Average deviation of price was: ({(1 - avg_deviation_price) * 100}%)")
 
     return True
 
