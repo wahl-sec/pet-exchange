@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 from typing import NoReturn, Union, List, Dict, Generator, Any, Optional, Callable
+from copy import deepcopy
 import functools
 import logging
 import time
@@ -39,8 +40,10 @@ class OrderBook:
         self._book_performed: Dict[str, Dict[str, Any]] = {}
         self._book_metrics: Dict[str, Dict[str, Any]] = {}
         self._exchange_order_type = exchange_order_type
-        self._book_bid_compared: Dict[Tuple[str, str], bool] = {}
-        self._book_ask_compared: Dict[Tuple[str, str], bool] = {}
+        self._book_compared: Dict[str, Any] = {
+            "direct": {},
+            "indirect": {},
+        }
         self._instrument = instrument
 
         # Setting this to True will disable sorting essentially since we use binary search to insert on add
@@ -99,16 +102,13 @@ class OrderBook:
         hi = len(self._book_bid)
         while lo < hi:
             mid = (lo + hi) // 2
-            try:
-                _identifier, _order = list(self._book_bid.items())[mid]
-            except IndexError as e:
-                print("BID", mid, lo, hi, len(list(self._book_bid.items())))
-                raise e
+
+            _identifier, _order = list(self._book_bid.items())[mid]
             result = matcher.compare_fn(
                 first=(_identifier, _order),
                 second=(identifier, order),
                 instrument=self._instrument,
-                cache=self._book_bid_compared,
+                cache=self._book_compared,
                 correct_counter=[],
                 total_counter=[],
                 total_timings=[],
@@ -156,17 +156,14 @@ class OrderBook:
         lo = 0
         hi = len(self._book_ask)
         while lo < hi:
-            try:
-                mid = (lo + hi) // 2
-            except IndexError as e:
-                print("ASK", mid, lo, hi, len(list(self._book_ask.items())))
-                raise e
+            mid = (lo + hi) // 2
+
             _identifier, _order = list(self._book_ask.items())[mid]
             result = matcher.compare_fn(
                 first=(identifier, order),
                 second=(_identifier, _order),
                 instrument=self._instrument,
-                cache=self._book_bid_compared,
+                cache=self._book_compared,
                 correct_counter=[],
                 total_counter=[],
                 total_timings=[],
@@ -230,10 +227,6 @@ class OrderBook:
         getattr(self, f"_add_{OrderType(order.type).name.lower()}")(
             order=order, identifier=_identifier, matcher=matcher
         )
-        # if self._exchange_order_type == ExchangeOrderType.LIMIT:
-        #     self.sort(
-        #         type=OrderType(order.type),
-        #     )
 
         return _identifier
 
@@ -321,8 +314,7 @@ class OrderBook:
             key: value for key, value in self._book_bid.items() if key not in b_dropped
         }
         self._book_performed.update(other._book_performed)
-        self._book_bid_compared.update(other._book_bid_compared)
-        self._book_ask_compared.update(other._book_ask_compared)
+        self._book_compared.update(other._book_compared)
         self.sorted = other.sorted
         self._locked_bid = False
         self._locked_ask = False

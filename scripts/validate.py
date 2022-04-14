@@ -30,7 +30,7 @@ def validate_client(path: str) -> bool:
     return True
 
 
-def validate_exchange(path: str) -> bool:
+def validate_exchange(path: str, precision: int) -> bool:
     _path = Path(path)
     if not _path.exists():
         raise ValueError(f"Path to exchange output file: '{path}' is not accessible")
@@ -41,6 +41,14 @@ def validate_exchange(path: str) -> bool:
         print(f"Validating exchange for submitted orders")
         for instrument, struct in exchange_file_json.items():
             for identifier, order in struct["PERFORMED"].items():
+                if precision is not None:
+                    order["performed"]["volume"] = round(
+                        order["performed"]["volume"], precision
+                    )
+                    order["performed"]["price"] = round(
+                        order["performed"]["price"], precision
+                    )
+
                 if order["instrument"] != instrument:
                     raise ValueError(
                         f"Instrument mismatch for order: '{identifier}', '{instrument}' != '{order['instrument']}'"
@@ -59,7 +67,9 @@ def validate_exchange(path: str) -> bool:
     return True
 
 
-def validate_executed(path_clients: List[str], path_exchange: str) -> bool:
+def validate_executed(
+    path_clients: List[str], path_exchange: str, precision: int
+) -> bool:
     _path_client = Path(path_client)
     if not _path_client.exists():
         raise ValueError(
@@ -88,7 +98,16 @@ def validate_executed(path_clients: List[str], path_exchange: str) -> bool:
             print(f"Validating exchange for executed orders for clients")
             for instrument, struct in exchange_file_json.items():
                 for executed_identifier, executed_order in struct["PERFORMED"].items():
+                    if precision is not None:
+                        executed_order["performed"]["price"] = round(
+                            executed_order["performed"]["price"], precision
+                        )
+                        executed_order["performed"]["volume"] = round(
+                            executed_order["performed"]["volume"], precision
+                        )
+
                     for order_type in executed_order["references"].keys():
+
                         if executed_order["references"][order_type] not in total_orders:
                             print(
                                 f"Executed order reference: '{executed_identifier}' for order '{executed_order['references'][order_type]}' not in client: '{executed_order['entity'][order_type]}' orders"
@@ -166,6 +185,13 @@ if __name__ == "__main__":
         nargs="+",
         required=True,
     )
+    parser.add_argument(
+        "-p",
+        "--precision",
+        help="The precision of the floating point values used",
+        type=int,
+        default=None,
+    )
     args = parser.parse_args()
 
     print("PET-Exchange Validator Starting ...", end="\n\n")
@@ -177,7 +203,7 @@ if __name__ == "__main__":
 
     print()
 
-    if validate_exchange(args.path_exchange):
+    if validate_exchange(args.path_exchange, args.precision):
         print(f"Exchange file: '{args.path_exchange}' OK!")
     else:
         print(f"Exchange file: '{args.path_exchange}' contained issue(s)")
@@ -185,7 +211,9 @@ if __name__ == "__main__":
     print()
 
     if validate_executed(
-        path_clients=args.path_clients, path_exchange=args.path_exchange
+        path_clients=args.path_clients,
+        path_exchange=args.path_exchange,
+        precision=args.precision,
     ):
         print(
             f"Executed orders for client: '{path_client}' and exchange: '{args.path_exchange}' OK!"

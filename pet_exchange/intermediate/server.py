@@ -176,13 +176,8 @@ class IntermediateServer(grpc_services.IntermediateProtoServicer):
         request: grpc_buffer.GetMinimumValuePlainRequest,
         context: grpc.ServicerContext,
     ) -> grpc_buffer.GetMinimumValuePlainReply:
-        handler = self._key_engine.key_handler(instrument=request.instrument)
-
         def compare(first, second):
-            return grpc_buffer.ChallengeResult(
-                minimum=handler.crypto.decrypt_float(first)
-                < handler.crypto.decrypt_float(second)
-            )
+            return grpc_buffer.ChallengeResult(minimum=first < second)
 
         _challenges: List[grpc_buffer.ChallengeResult] = [0] * len(request.challenges)
         with ThreadPoolExecutor(max_workers=len(request.challenges)) as pool:

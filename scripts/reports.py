@@ -1037,6 +1037,8 @@ def create_report(
                                 _ask_list.extend(section_struct_value["sizes"])
                         else:
                             _bid_list.extend(section_struct_value["sizes"])
+                    elif "accuracy" in section_struct_value:
+                        print(section_struct_value)
 
         struct["METRICS"] = METRICS_STRUCTURE.copy()
         struct["METRICS"].update(

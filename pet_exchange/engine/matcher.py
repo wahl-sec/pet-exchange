@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from typing import NoReturn, Dict, Union, Generator, Tuple, List, Optional
+from typing import NoReturn, Dict, Union, Generator, Tuple, List, Optional, Any
 from concurrent.futures import ThreadPoolExecutor, Future, as_completed
 from copy import deepcopy, copy
 from datetime import datetime
@@ -55,6 +55,7 @@ class MatchingEngine:
         self.crypto: Dict[str, CKKS] = {}
         self.output = output
         self.time_limit = time_limit
+        self.encrypted = encrypted
         if local_compare and encrypted is not None:
             self.compare_fn = self._compare_local_encrypted
         elif local_compare and encrypted is None:
@@ -86,11 +87,15 @@ class MatchingEngine:
             with _path.open(mode="r+") as _file:
                 _book = json.load(_file)
                 if instrument not in _book:
-                    _book[instrument] = {"PERFORMED": {}, "METRICS": {}}
+                    _book[instrument] = {
+                        "PERFORMED": {},
+                        "METRICS": {},
+                    }
 
                 _book[instrument]["PERFORMED"].update(
                     self.book[instrument]._book_performed
                 )
+
                 _book[instrument]["METRICS"].update(self.book[instrument]._book_metrics)
 
         with _path.open(mode="w+") as _file:
@@ -315,11 +320,6 @@ class MatchingEngine:
                 timings["TIME_TO_MATCH_ORDER"].append(end_match_time - start_match_time)
                 timings["SIZE_OF_ORDER"].append(sys.getsizeof(b_order))
 
-                logger.log(
-                    level=TRADE_LOG_LEVEL,
-                    msg=f"{self.__name__} ({instrument}): Trade 'BID' ({b_identifier}) V ({b_order_c.volume.hex()[:20]}) -> V ({b_order_volume.hex()[:20]}), 'ASK' ({a_identifier}) V ({a_order_c.volume.hex()[:20]}) -> V ({a_order_volume.hex()[:20]}) for P ({a_order_price.to_bytes().hex()[:20]})",
-                )
-
                 start_time = time.time()
                 d_order = self._intermediate_channel.DecryptOrder(
                     order=grpc_buffer_intermediate.CiphertextOrder(
@@ -334,8 +334,9 @@ class MatchingEngine:
                 end_time = time.time()
                 timings["TIME_TO_DECRYPT_ORDER"].append(end_time - start_time)
 
-                print(
-                    f"(A PRICE: {d_order.order.price}, A VOL: {d_order.order.volume})"
+                logger.log(
+                    level=TRADE_LOG_LEVEL,
+                    msg=f"{self.__name__} ({instrument}): Trade 'BID' ({b_identifier}) V ({d_order.order.volume}), 'ASK' ({a_identifier}) V ({d_order.order.volume}) for P ({d_order.order.price})",
                 )
 
                 book.add_performed(
@@ -590,7 +591,7 @@ class MatchingEngine:
                     first=first,
                     second=second,
                     instrument=instrument,
-                    cache=book._book_bid_compared,
+                    cache=book._book_compared,
                     correct_counter=correct_counter_bid,
                     total_counter=total_counter_bid,
                     total_timings=total_timings_bid,
@@ -631,7 +632,7 @@ class MatchingEngine:
                     first=first,
                     second=second,
                     instrument=instrument,
-                    cache=book._book_bid_compared,
+                    cache=book._book_compared,
                     correct_counter=correct_counter_ask,
                     total_counter=total_counter_ask,
                     total_timings=total_timings_ask,
@@ -808,8 +809,6 @@ class MatchingEngine:
             },
         )
 
-        print(time.time() - start_matching_time)
-
         return result
 
     def _compare_local(
@@ -839,7 +838,8 @@ class MatchingEngine:
         second_identifier, second = second
         first, second = first.price, second.price
 
-        _cache_result = cache.get((first_identifier, second_identifier))
+        _cache_result = self.is_cached(first_identifier, second_identifier, cache)
+        # _cache_result = cache.get((first_identifier, second_identifier))
 
         # TODO: Perhaps something smarter, that can determine like a binary tree
         if _cache_result is not None:
@@ -860,8 +860,10 @@ class MatchingEngine:
         )
         end_compare = time.time()
 
-        cache[(first_identifier, second_identifier)] = result
-        cache[(second_identifier, first_identifier)] = -1 * result
+        cache["direct"][(first_identifier, second_identifier)] = result
+        cache["direct"][(second_identifier, first_identifier)] = -1 * result
+        cache["indirect"][first_identifier][result].append(second_identifier)
+        cache["indirect"][second_identifier][-1 * result].append(first_identifier)
 
         correct_counter.append(result == expected)
         total_counter.append(True)
@@ -889,7 +891,8 @@ class MatchingEngine:
         second_identifier, second = second
         first, second = first.price, second.price
 
-        _cache_result = cache.get((first_identifier, second_identifier))
+        _cache_result = self.is_cached(first_identifier, second_identifier, cache)
+        # _cache_result = cache.get((first_identifier, second_identifier))
 
         # TODO: Perhaps something smarter, that can determine like a binary tree
         if _cache_result is not None:
@@ -922,8 +925,10 @@ class MatchingEngine:
 
         expected = -1 if first < second else 1
 
-        cache[(first_identifier, second_identifier)] = result
-        cache[(second_identifier, first_identifier)] = -1 * result
+        cache["direct"][(first_identifier, second_identifier)] = result
+        cache["direct"][(second_identifier, first_identifier)] = -1 * result
+        cache["indirect"][first_identifier][result].append(second_identifier)
+        cache["indirect"][second_identifier][-1 * result].append(first_identifier)
 
         correct_counter.append(result == expected)
         total_counter.append(True)
@@ -964,7 +969,8 @@ class MatchingEngine:
             ctxt=second.price
         )
 
-        _cache_result = cache.get((first_identifier, second_identifier))
+        _cache_result = self.is_cached(first_identifier, second_identifier, cache)
+        # _cache_result = cache.get((first_identifier, second_identifier))
 
         # TODO: Perhaps something smarter, that can determine like a binary tree
         if _cache_result is not None:
@@ -1131,8 +1137,11 @@ class MatchingEngine:
             #     f"a = {crypto.decrypt_float(a)}, b = {crypto.decrypt_float(b)}, x = {crypto.decrypt_float(x)}, f = {crypto.decrypt_float(first)}, s = {crypto.decrypt_float(second)}"
             # )
 
-            cache[(first_identifier, second_identifier)] = result
-            cache[(second_identifier, first_identifier)] = -1 * result
+            cache["direct"][(first_identifier, second_identifier)] = result
+            cache["direct"][(second_identifier, first_identifier)] = -1 * result
+            cache["indirect"][first_identifier][result].append(second_identifier)
+            cache["indirect"][second_identifier][-1 * result].append(first_identifier)
+
             return result, expected
 
         start_compare = time.time()
@@ -1175,7 +1184,8 @@ class MatchingEngine:
             ctxt=second.price
         )
 
-        _cache_result = cache.get((first_identifier, second_identifier))
+        _cache_result = self.is_cached(first_identifier, second_identifier, cache)
+        # _cache_result = cache.get((first_identifier, second_identifier))
 
         # TODO: Perhaps something smarter, that can determine like a binary tree
         if _cache_result is not None:
@@ -1222,11 +1232,88 @@ class MatchingEngine:
 
         # correct_counter.append(result == expected)
 
-        cache[(first_identifier, second_identifier)] = result
-        cache[(second_identifier, first_identifier)] = -1 * result
+        cache["direct"][(first_identifier, second_identifier)] = result
+        cache["direct"][(second_identifier, first_identifier)] = -1 * result
+        cache["indirect"][first_identifier][result].append(second_identifier)
+        cache["indirect"][second_identifier][-1 * result].append(first_identifier)
 
         total_counter.append(True)
         total_timings.append(end_time - start_time)
+        return result
+
+    def is_cached(
+        self, first: str, second: str, cache: Dict[str, Any]
+    ) -> Union[int, None]:
+        """Determines if a compare can be derived from previous results.
+        1. Checks if pair has been compared before, direct check.
+        2. Checks if pair result can be derived from transitive compare, indirect.
+        3. Not cached, None
+        """
+        # The direct cache is only really used when sorting completely
+        if (first, second) in cache["direct"]:
+            return cache["direct"][(first, second)]
+
+        _indirect = cache["indirect"].setdefault(first, {1: [], -1: []})
+
+        # This requires both of the items to have been compared before but not with each other
+        result = None
+        if result is None:
+            for third in _indirect[1]:
+                # first < third
+
+                if second in cache["indirect"][third][1]:
+                    # third < second, therefore we have first < second
+                    result = 1
+                    break
+                elif second in cache["indirect"][third][-1]:
+                    # second < third, therefore we can't determine the result
+                    break
+
+        if result is None:
+            for third in _indirect[-1]:
+                # first > third
+
+                if second in cache["indirect"][third][-1]:
+                    # third > second, therefore we have first > second
+                    result = -1
+                    break
+                elif second in cache["indirect"][third][1]:
+                    # second > third, therefore we can't determine the result
+                    break
+
+        _indirect = cache["indirect"].setdefault(second, {1: [], -1: []})
+
+        if result is None:
+            for third in _indirect[1]:
+                # second < third
+
+                if first in cache["indirect"][third][1]:
+                    # third < first, therefore we have first > second
+                    result = -1
+                    break
+                elif first in cache["indirect"][third][-1]:
+                    # first < third, therefore we can't determine the result
+                    break
+
+        if result is None:
+            for third in _indirect[-1]:
+                # second > third
+
+                if first in cache["indirect"][third][-1]:
+                    # third > first, therefore we have first < second
+                    result = 1
+                    break
+                elif first in cache["indirect"][third][1]:
+                    # first > third, therefore we can't determine the result
+                    break
+
+        if result is not None:
+            cache["direct"][(first, second)] = result
+            cache["direct"][(second, first)] = -1 * result
+            cache["indirect"][first][result].append(second)
+            cache["indirect"][second][-1 * result].append(first)
+
+            logger.warning("HERE")
         return result
 
     def match(
@@ -1265,7 +1352,9 @@ class MatchingEngine:
                             other_book, b_dropped, a_dropped = future.result()
 
                             self.book[instrument].merge(
-                                other_book, b_dropped, a_dropped
+                                other_book,
+                                b_dropped,
+                                a_dropped,
                             )
                             if self.output is not None:
                                 self._write_output(instrument)
