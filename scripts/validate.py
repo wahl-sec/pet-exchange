@@ -88,6 +88,7 @@ def validate_executed(
         total_orders: Dict[str, Any] = {}
         total_orders_results: Dict[str, bool] = {}
         total_orders_results_price: Dict[str, Tuple[bool, float]] = {}
+        total_orders_results_volume: Dict[str, Tuple[bool, float]] = {}
 
         with _path_client.open(mode="r") as client_file:
             client_file_json = json.load(client_file)
@@ -96,6 +97,7 @@ def validate_executed(
                     total_orders[identifier] = order
                     total_orders_results[identifier] = True
                     total_orders_results_price[identifier] = (True, 1.0)
+                    total_orders_results_volume[identifier] = (True, 1.0)
 
             print(f"Validating exchange for executed orders for clients")
             for instrument, struct in exchange_file_json.items():
@@ -109,6 +111,23 @@ def validate_executed(
                         )
 
                     for order_type in executed_order["references"].keys():
+                        if precision is not None:
+                            total_orders[executed_order["references"][order_type]][
+                                "price"
+                            ] = round(
+                                total_orders[executed_order["references"][order_type]][
+                                    "price"
+                                ],
+                                precision,
+                            )
+                            total_orders[executed_order["references"][order_type]][
+                                "volume"
+                            ] = round(
+                                total_orders[executed_order["references"][order_type]][
+                                    "volume"
+                                ],
+                                precision,
+                            )
 
                         if executed_order["references"][order_type] not in total_orders:
                             print(
@@ -134,7 +153,16 @@ def validate_executed(
                             total_orders_results[
                                 executed_order["references"][order_type]
                             ] = False
-                            continue
+                            total_orders_results_volume[
+                                executed_order["references"][order_type]
+                            ] = (
+                                False,
+                                abs(
+                                    total_orders[
+                                        executed_order["references"][order_type]
+                                    ]["volume"]
+                                ),
+                            )
 
                     if (
                         executed_order["performed"]["price"]
@@ -155,7 +183,6 @@ def validate_executed(
                                 "price"
                             ],
                         )
-                        continue
 
                     if (
                         executed_order["performed"]["price"]
@@ -176,29 +203,73 @@ def validate_executed(
                                 "price"
                             ],
                         )
-                        continue
 
     correct_ratio = len(list(filter(lambda _: _, total_orders_results.values()))) / len(
         total_orders_results
     )
+    correct_ratio_price = len(
+        list(filter(lambda _: _[0], total_orders_results_price.values()))
+    ) / len(total_orders_results_price)
+    correct_ratio_volume = len(
+        list(filter(lambda _: _[0], total_orders_results_volume.values()))
+    ) / len(total_orders_results_volume)
 
     wrong_ratio = len(
         list(filter(lambda _: not _, total_orders_results.values()))
     ) / len(total_orders_results)
-    avg_deviation_price = sum(
-        [
-            _[1]
-            for _ in list(
-                filter(lambda _: not _[0], total_orders_results_price.values())
+    wrong_ratio_price = len(
+        list(filter(lambda _: not _[0], total_orders_results_price.values()))
+    ) / len(total_orders_results_price)
+    wrong_ratio_volume = len(
+        list(filter(lambda _: not _[0], total_orders_results_volume.values()))
+    ) / len(total_orders_results_volume)
+
+    avg_deviation_price = (
+        (
+            sum(
+                [
+                    _[1]
+                    for _ in list(
+                        filter(lambda _: not _[0], total_orders_results_price.values())
+                    )
+                ]
             )
-        ]
-    ) / len(list(filter(lambda _: not _[0], total_orders_results_price.values())))
+            / len(list(filter(lambda _: not _[0], total_orders_results_price.values())))
+        )
+        if list(filter(lambda _: not _[0], total_orders_results_price.values()))
+        else 1
+    )
+
+    avg_deviation_volume = (
+        (
+            sum(
+                [
+                    _[1]
+                    for _ in list(
+                        filter(lambda _: not _[0], total_orders_results_volume.values())
+                    )
+                ]
+            )
+            / len(
+                list(filter(lambda _: not _[0], total_orders_results_volume.values()))
+            )
+        )
+        if list(filter(lambda _: not _[0], total_orders_results_volume.values()))
+        else 0
+    )
 
     print(
         f"Correct Count: ({len(list(filter(lambda _: _, total_orders_results.values())))}) ({correct_ratio * 100}%), Wrong Count: ({len(list(filter(lambda _: not _, total_orders_results.values())))}) ({wrong_ratio * 100}%)"
     )
+    print(
+        f"Correct Count Price: ({len(list(filter(lambda _: _[0], total_orders_results_price.values())))}) ({correct_ratio_price * 100}%), Wrong Count: ({len(list(filter(lambda _: not _[0], total_orders_results_price.values())))}) ({wrong_ratio_price * 100}%)"
+    )
+    print(
+        f"Correct Count Volume: ({len(list(filter(lambda _: _[0], total_orders_results_volume.values())))}) ({correct_ratio_volume * 100}%), Wrong Count: ({len(list(filter(lambda _: not _[0], total_orders_results_volume.values())))}) ({wrong_ratio_volume * 100}%)"
+    )
 
     print(f"Average deviation of price was: ({(1 - avg_deviation_price) * 100}%)")
+    print(f"Average deviation of volume was: ({(avg_deviation_volume) * 100}%)")
 
     return True
 

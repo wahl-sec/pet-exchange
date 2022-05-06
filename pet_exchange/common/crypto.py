@@ -13,13 +13,17 @@ import numpy as np
 # scale - scaling factor - defines encoding precision for the binary representation of coefficients, bigger is better (precision), bigger is worse (performance?)`
 CKKS_PARAMETERS = {
     "n": 2**14,
-    "qs": [52] + [45] * 6,
+    # "qs": [52] + [45] * 0,  # CKKS-11, CKKS-12 (2**11 (128), 2**12 (256))
+    "qs": [52] + [45] * 6,  # CKKS-14 (2**14 (128))
+    # "qs": [45] + [32] * 6,  # CKKS-14 (2**14 (256))
     # "qs": [24] + [23] * 18,
     "scale": 2**45,
 }
 
 # Max qs for 2 ** 14 is 438
-# Need atleast 11 primes if approx is 2 ** 1
+# n = 2**11 (128-bit)
+# n = 2**14 (128-bit if 6 level)
+# n = 2**12 (256 if 1 level)
 
 
 class CKKS:
