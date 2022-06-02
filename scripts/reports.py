@@ -157,6 +157,10 @@ METRICS_STRUCTURE = {
     "MAX_TIME_TO_MATCH_ORDER": None,
     "MIN_TIME_TO_MATCH_ORDER": None,
     "AVERAGE_TIME_TO_MATCH_ORDER": None,
+    "TOTAL_TIME_TO_MATCH_ORDER_NET": None,
+    "MAX_TIME_TO_MATCH_ORDER_NET": None,
+    "MIN_TIME_TO_MATCH_ORDER_NET": None,
+    "AVERAGE_TIME_TO_MATCH_ORDER_NET": None,
     "MAX_TIME_TO_DECRYPT_ORDER": None,
     "MAX_TIME_TO_DECRYPT_ORDER_BID": None,
     "MAX_TIME_TO_DECRYPT_ORDER_ASK": None,
@@ -840,10 +844,14 @@ def create_report(
         all_orders: Dict[str, Any] = {}
         all_orders_executed: Dict[str, Any] = {}
         all_metrics_executed: Dict[str, Any] = {}
+        client_metrics: Dict[str, Any] = {}
 
         for _client_path in _client_paths:
             with _client_path.open(mode="r") as client_file:
                 client_file_json = json.load(client_file)
+                for client, metrics in client_file_json["METRICS"].items():
+                    client_metrics[client] = metrics
+
                 for client, orders in client_file_json["CLIENTS"].items():
                     if client in struct["CLIENTS"]:
                         print(
@@ -956,11 +964,24 @@ def create_report(
         time_sort_orders_ask: List[float] = []
         time_insert_orders_bid: List[float] = []
         time_insert_orders_ask: List[float] = []
+        time_insert_orders_bid_net: List[float] = []
+        time_insert_orders_ask_net: List[float] = []
         time_match_orders: List[float] = []
+        time_match_orders_net: List[float] = []
+        time_compare_local: List[float] = []
+        time_compare_local_net: List[float] = []
+        time_compare_remote: List[float] = []
+        time_compare_remote_net: List[float] = []
+        time_compare_insert_local: List[float] = []
+        time_compare_insert_local_net: List[float] = []
+        time_compare_insert_remote: List[float] = []
+        time_compare_insert_remote_net: List[float] = []
         time_decrypt_orders: List[float] = []
         time_generate_challenges: List[float] = []
-        time_get_minimum_price: List[float] = []
-        time_get_minimum_volume: List[float] = []
+        time_get_minimum_value: List[float] = []
+        time_get_minimum_value_net: List[float] = []
+        time_get_minimum_insert_value: List[float] = []
+        time_get_minimum_insert_value_net: List[float] = []
         time_pad_orders_price_bid: List[float] = []
         time_pad_orders_price_ask: List[float] = []
         time_unpad_orders_price_bid: List[float] = []
@@ -970,8 +991,10 @@ def create_report(
         time_unpad_orders_volume_bid: List[float] = []
         time_unpad_orders_volume_ask: List[float] = []
         time_unpad_orders_volume_minimum: List[float] = []
+        time_send_orders_net: List[float] = []
         size_orders: List[float] = []
         size_challenges: List[float] = []
+        time_iterations: List[float] = []
         for category_name, category_struct in all_metrics_executed.items():
             for section_name, section_struct in category_struct.items():
                 if category_name == "sorting":
@@ -984,9 +1007,32 @@ def create_report(
                     elif section_name == "insert":
                         _bid_list = time_insert_orders_bid
                         _ask_list = time_insert_orders_ask
+                    elif section_name == "insert_net":
+                        _bid_list = time_insert_orders_bid_net
+                        _ask_list = time_insert_orders_ask_net
                 elif category_name == "match":
                     if section_name == "pairs":
                         _bid_list = time_match_orders
+                    elif section_name == "pairs_net":
+                        _bid_list = time_match_orders_net
+                elif category_name == "compare":
+                    if section_name == "local":
+                        _bid_list = time_compare_local
+                    elif section_name == "local_net":
+                        _bid_list = time_compare_local_net
+                    elif section_name == "remote":
+                        _bid_list = time_compare_remote
+                    elif section_name == "remote_net":
+                        _bid_list = time_compare_remote_net
+                elif category_name == "compare_insert":
+                    if section_name == "local":
+                        _bid_list = time_compare_insert_local
+                    elif section_name == "local_net":
+                        _bid_list = time_compare_insert_local_net
+                    elif section_name == "remote":
+                        _bid_list = time_compare_insert_remote
+                    elif section_name == "remote_net":
+                        _bid_list = time_compare_insert_remote_net
                 elif category_name == "decrypt":
                     if section_name == "order":
                         _bid_list = time_decrypt_orders
@@ -994,10 +1040,15 @@ def create_report(
                     if section_name == "generate":
                         _bid_list = time_generate_challenges
                 elif category_name == "minimum":
-                    if section_name == "price":
-                        _bid_list = time_get_minimum_price
-                    elif section_name == "volume":
-                        _bid_list = time_get_minimum_volume
+                    if section_name == "value":
+                        _bid_list = time_get_minimum_value
+                    elif section_name == "value_net":
+                        _bid_list = time_get_minimum_value_net
+                elif category_name == "minimum_insert":
+                    if section_name == "value":
+                        _bid_list = time_get_minimum_insert_value
+                    elif section_name == "value_net":
+                        _bid_list = time_get_minimum_insert_value_net
                 elif category_name == "pad":
                     if section_name == "price":
                         _bid_list = time_pad_orders_price_bid
@@ -1019,6 +1070,9 @@ def create_report(
                         _bid_list = size_orders
                     elif section_name == "challenge":
                         _bid_list = size_challenges
+                elif category_name == "iteration":
+                    if section_name == "time":
+                        _bid_list = time_iterations
 
                 for section_struct_value in section_struct:
                     if "timings" in section_struct_value:
@@ -1040,9 +1094,22 @@ def create_report(
                     elif "accuracy" in section_struct_value:
                         print(section_struct_value)
 
+        print(max(time_iterations))
         struct["METRICS"] = METRICS_STRUCTURE.copy()
         struct["METRICS"].update(
             {
+                "TOTAL_TIME_TO_SEND_ORDER": sum(
+                    [
+                        sum(client_metrics[client]["TIME_TO_SEND_ORDER"])
+                        for client in client_metrics
+                    ]
+                ),
+                "TOTAL_TIME_TO_SEND_ORDER_NET": sum(
+                    [
+                        sum(client_metrics[client]["TIME_TO_SEND_ORDER_NET"])
+                        for client in client_metrics
+                    ]
+                ),
                 "TOTAL_ORDERS_SUBMITTED": len(total_orders),
                 "TOTAL_ORDERS_SUBMITTED_BID": len(
                     [_order for _order in total_orders if _order["type"] == "BID"]
@@ -1113,8 +1180,13 @@ def create_report(
                 "TOTAL_TIME_TO_INSERT_ORDERS": sum(
                     time_insert_orders_bid + time_insert_orders_ask
                 ),
+                "TOTAL_TIME_TO_INSERT_ORDERS_NET": sum(
+                    time_insert_orders_bid_net + time_insert_orders_ask_net
+                ),
                 "TOTAL_TIME_TO_INSERT_ORDERS_BID": sum(time_insert_orders_bid),
+                "TOTAL_TIME_TO_INSERT_ORDERS_BID_NET": sum(time_insert_orders_bid_net),
                 "TOTAL_TIME_TO_INSERT_ORDERS_ASK": sum(time_insert_orders_ask),
+                "TOTAL_TIME_TO_INSERT_ORDERS_ASK_NET": sum(time_insert_orders_ask_net),
                 "TOTAL_VOLUME_SUBMITTED": sum(
                     [_order["volume"] for _order in all_orders.values()]
                 ),
@@ -1146,15 +1218,34 @@ def create_report(
                 )
                 if time_insert_orders_bid or time_insert_orders_ask
                 else None,
+                "AVERAGE_TIME_TO_INSERT_ORDERS_NET": (
+                    sum(time_insert_orders_bid_net + time_insert_orders_ask_net)
+                    / (
+                        len(time_insert_orders_bid_net)
+                        + len(time_insert_orders_ask_net)
+                    )
+                )
+                if time_insert_orders_bid_net or time_insert_orders_ask_net
+                else None,
                 "AVERAGE_TIME_TO_INSERT_ORDERS_BID": (
                     sum(time_insert_orders_bid) / (len(time_insert_orders_bid))
                 )
                 if time_insert_orders_bid
                 else None,
+                "AVERAGE_TIME_TO_INSERT_ORDERS_BID_NET": (
+                    sum(time_insert_orders_bid_net) / (len(time_insert_orders_bid_net))
+                )
+                if time_insert_orders_bid_net
+                else None,
                 "AVERAGE_TIME_TO_INSERT_ORDERS_ASK": (
                     sum(time_insert_orders_ask) / (len(time_insert_orders_ask))
                 )
                 if time_insert_orders_ask
+                else None,
+                "AVERAGE_TIME_TO_INSERT_ORDERS_ASK_NET": (
+                    sum(time_insert_orders_ask_net) / (len(time_insert_orders_ask_net))
+                )
+                if time_insert_orders_ask_net
                 else None,
                 "TOTAL_VOLUME_SUBMITTED_BID": sum(
                     [
@@ -1374,6 +1465,18 @@ def create_report(
                 )
                 if time_match_orders
                 else None,
+                "TOTAL_TIME_TO_MATCH_ORDER_NET": sum(time_match_orders_net),
+                "MAX_TIME_TO_MATCH_ORDER_NET": max(time_match_orders_net)
+                if time_match_orders_net
+                else None,
+                "MIN_TIME_TO_MATCH_ORDER_NET": min(time_match_orders_net)
+                if time_match_orders_net
+                else None,
+                "AVERAGE_TIME_TO_MATCH_ORDER_NET": (
+                    sum(time_match_orders_net) / (len(time_match_orders_net))
+                )
+                if time_match_orders_net
+                else None,
                 "MAX_TIME_TO_DECRYPT_ORDER": max(time_decrypt_orders)
                 if time_decrypt_orders
                 else None,
@@ -1396,33 +1499,201 @@ def create_report(
                 )
                 if time_generate_challenges
                 else None,
-                "TOTAL_TIME_TO_GET_MINIMUM_PRICE": sum(time_get_minimum_price)
-                if time_get_minimum_price
+                "TOTAL_TIME_TO_GET_MINIMUM_VALUE": sum(time_get_minimum_value)
+                if time_get_minimum_value
                 else None,
-                "MAX_TIME_TO_GET_MINIMUM_PRICE": max(time_get_minimum_price)
-                if time_get_minimum_price
+                "MAX_TIME_TO_GET_MINIMUM_VALUE": max(time_get_minimum_value)
+                if time_get_minimum_value
                 else None,
-                "MIN_TIME_TO_GET_MINIMUM_PRICE": min(time_get_minimum_price)
-                if time_get_minimum_price
+                "MIN_TIME_TO_GET_MINIMUM_VALUE": min(time_get_minimum_value)
+                if time_get_minimum_value
                 else None,
-                "AVERAGE_TIME_TO_GET_MINIMUM_PRICE": (
-                    sum(time_get_minimum_price) / (len(time_get_minimum_price))
+                "AVERAGE_TIME_TO_GET_MINIMUM_VALUE": (
+                    sum(time_get_minimum_value) / (len(time_get_minimum_value))
                 )
-                if time_get_minimum_price
+                if time_get_minimum_value
                 else None,
-                "TOTAL_TIME_TO_GET_MINIMUM_VOLUME": sum(time_get_minimum_volume)
-                if time_get_minimum_volume
+                "TOTAL_TIME_TO_GET_MINIMUM_VALUE_NET": sum(time_get_minimum_value_net)
+                if time_get_minimum_value_net
                 else None,
-                "MAX_TIME_TO_GET_MINIMUM_VOLUME": max(time_get_minimum_volume)
-                if time_get_minimum_volume
+                "MAX_TIME_TO_GET_MINIMUM_VALUE_NET": max(time_get_minimum_value_net)
+                if time_get_minimum_value_net
                 else None,
-                "MIN_TIME_TO_GET_MINIMUM_VOLUME": min(time_get_minimum_volume)
-                if time_get_minimum_volume
+                "MIN_TIME_TO_GET_MINIMUM_VALUE_NET": min(time_get_minimum_value_net)
+                if time_get_minimum_value_net
                 else None,
-                "AVERAGE_TIME_TO_GET_MINIMUM_VOLUME": (
-                    sum(time_get_minimum_volume) / (len(time_get_minimum_volume))
+                "AVERAGE_TIME_TO_GET_MINIMUM_VALUE_NET": (
+                    sum(time_get_minimum_value_net) / (len(time_get_minimum_value_net))
                 )
-                if time_get_minimum_volume
+                if time_get_minimum_value_net
+                else None,
+                "TOTAL_TIME_TO_GET_MINIMUM_INSERT_VALUE": sum(
+                    time_get_minimum_insert_value
+                )
+                if time_get_minimum_insert_value
+                else None,
+                "MAX_TIME_TO_GET_MINIMUM_INSERT_VALUE": max(
+                    time_get_minimum_insert_value
+                )
+                if time_get_minimum_insert_value
+                else None,
+                "MIN_TIME_TO_GET_MINIMUM_INSERT_VALUE": min(
+                    time_get_minimum_insert_value
+                )
+                if time_get_minimum_insert_value
+                else None,
+                "AVERAGE_TIME_TO_GET_MINIMUM_INSERT_VALUE": (
+                    sum(time_get_minimum_insert_value)
+                    / (len(time_get_minimum_insert_value))
+                )
+                if time_get_minimum_insert_value
+                else None,
+                "TOTAL_TIME_TO_GET_MINIMUM_INSERT_VALUE_NET": sum(
+                    time_get_minimum_insert_value_net
+                )
+                if time_get_minimum_insert_value_net
+                else None,
+                "MAX_TIME_TO_GET_MINIMUM_INSERT_VALUE_NET": max(
+                    time_get_minimum_insert_value_net
+                )
+                if time_get_minimum_insert_value_net
+                else None,
+                "MIN_TIME_TO_GET_MINIMUM_INSERT_VALUE_NET": min(
+                    time_get_minimum_insert_value_net
+                )
+                if time_get_minimum_insert_value_net
+                else None,
+                "AVERAGE_TIME_TO_GET_MINIMUM_INSERT_VALUE_NET": (
+                    sum(time_get_minimum_insert_value_net)
+                    / (len(time_get_minimum_insert_value_net))
+                )
+                if time_get_minimum_insert_value_net
+                else None,
+                "TOTAL_TIME_TO_COMPARE_LOCAL": sum(time_compare_local)
+                if time_compare_local
+                else None,
+                "MAX_TIME_TO_COMPARE_LOCAL": max(time_compare_local)
+                if time_compare_local
+                else None,
+                "MIN_TIME_TO_COMPARE_LOCAL": min(time_compare_local)
+                if time_compare_local
+                else None,
+                "AVERAGE_TIME_TO_COMPARE_LOCAL": (
+                    sum(time_compare_local) / (len(time_compare_local))
+                )
+                if time_compare_local
+                else None,
+                "TOTAL_TIME_TO_COMPARE_LOCAL_NET": sum(time_compare_local_net)
+                if time_compare_local_net
+                else None,
+                "MAX_TIME_TO_COMPARE_LOCAL_NET": max(time_compare_local_net)
+                if time_compare_local_net
+                else None,
+                "MIN_TIME_TO_COMPARE_LOCAL_NET": min(time_compare_local_net)
+                if time_compare_local_net
+                else None,
+                "AVERAGE_TIME_TO_COMPARE_LOCAL_NET": (
+                    sum(time_compare_local_net) / (len(time_compare_local_net))
+                )
+                if time_compare_local_net
+                else None,
+                "TOTAL_TIME_TO_COMPARE_REMOTE": sum(time_compare_remote)
+                if time_compare_remote
+                else None,
+                "MAX_TIME_TO_COMPARE_REMOTE": max(time_compare_remote)
+                if time_compare_remote
+                else None,
+                "MIN_TIME_TO_COMPARE_REMOTE": min(time_compare_remote)
+                if time_compare_remote
+                else None,
+                "AVERAGE_TIME_TO_COMPARE_REMOTE": (
+                    sum(time_compare_remote) / (len(time_compare_remote))
+                )
+                if time_compare_remote
+                else None,
+                "TOTAL_TIME_TO_COMPARE_REMOTE_NET": sum(time_compare_remote_net)
+                if time_compare_remote_net
+                else None,
+                "MAX_TIME_TO_COMPARE_REMOTE_NET": max(time_compare_remote_net)
+                if time_compare_remote_net
+                else None,
+                "MIN_TIME_TO_COMPARE_REMOTE_NET": min(time_compare_remote_net)
+                if time_compare_remote_net
+                else None,
+                "AVERAGE_TIME_TO_COMPARE_REMOTE_NET": (
+                    sum(time_compare_remote_net) / (len(time_compare_remote_net))
+                )
+                if time_compare_remote_net
+                else None,
+                "TOTAL_TIME_TO_COMPARE_INSERT_LOCAL": sum(time_compare_insert_local)
+                if time_compare_insert_local
+                else None,
+                "MAX_TIME_TO_COMPARE_INSERT_LOCAL": max(time_compare_insert_local)
+                if time_compare_insert_local
+                else None,
+                "MIN_TIME_TO_COMPARE_INSERT_LOCAL": min(time_compare_insert_local)
+                if time_compare_insert_local
+                else None,
+                "AVERAGE_TIME_TO_COMPARE_INSERT_LOCAL": (
+                    sum(time_compare_insert_local) / (len(time_compare_insert_local))
+                )
+                if time_compare_insert_local
+                else None,
+                "TOTAL_TIME_TO_COMPARE_INSERT_LOCAL_NET": sum(
+                    time_compare_insert_local_net
+                )
+                if time_compare_insert_local_net
+                else None,
+                "MAX_TIME_TO_COMPARE_INSERT_LOCAL_NET": max(
+                    time_compare_insert_local_net
+                )
+                if time_compare_insert_local_net
+                else None,
+                "MIN_TIME_TO_COMPARE_INSERT_LOCAL_NET": min(
+                    time_compare_insert_local_net
+                )
+                if time_compare_insert_local_net
+                else None,
+                "AVERAGE_TIME_TO_COMPARE_INSERT_LOCAL_NET": (
+                    sum(time_compare_insert_local_net)
+                    / (len(time_compare_insert_local_net))
+                )
+                if time_compare_insert_local_net
+                else None,
+                "TOTAL_TIME_TO_COMPARE_INSERT_REMOTE": sum(time_compare_insert_remote)
+                if time_compare_insert_remote
+                else None,
+                "MAX_TIME_TO_COMPARE_INSERT_REMOTE": max(time_compare_insert_remote)
+                if time_compare_insert_remote
+                else None,
+                "MIN_TIME_TO_COMPARE_INSERT_REMOTE": min(time_compare_insert_remote)
+                if time_compare_insert_remote
+                else None,
+                "AVERAGE_TIME_TO_COMPARE_INSERT_REMOTE": (
+                    sum(time_compare_insert_remote) / (len(time_compare_insert_remote))
+                )
+                if time_compare_insert_remote
+                else None,
+                "TOTAL_TIME_TO_COMPARE_INSERT_REMOTE_NET": sum(
+                    time_compare_insert_remote_net
+                )
+                if time_compare_insert_remote_net
+                else None,
+                "MAX_TIME_TO_COMPARE_INSERT_REMOTE_NET": max(
+                    time_compare_insert_remote_net
+                )
+                if time_compare_insert_remote_net
+                else None,
+                "MIN_TIME_TO_COMPARE_INSERT_REMOTE_NET": min(
+                    time_compare_insert_remote_net
+                )
+                if time_compare_insert_remote_net
+                else None,
+                "AVERAGE_TIME_TO_COMPARE_INSERT_REMOTE_NET": (
+                    sum(time_compare_insert_remote_net)
+                    / (len(time_compare_insert_remote_net))
+                )
+                if time_compare_insert_remote_net
                 else None,
                 "MAX_TIME_TO_PAD_ORDERS_PRICE": max(
                     time_pad_orders_price_ask + time_pad_orders_price_bid
@@ -1621,6 +1892,22 @@ def create_report(
                 )
                 if size_challenges
                 else None,
+                "TIME_COMPARE_LOCAL_NET_COUNT": len(time_compare_local_net),
+                "TIME_COMPARE_LOCAL_NET_SUM": sum(time_compare_local_net),
+                "TIME_COMPARE_REMOTE_NET_COUNT": len(time_compare_remote_net),
+                "TIME_COMPARE_REMOTE_NET_SUM": sum(time_compare_remote_net),
+                "EFFECTIVE_RUN_TIME": max(time_iterations),
+                "TOTAL_TIME_NET": sum(
+                    time_compare_local_net
+                    + time_compare_insert_local_net
+                    + time_compare_remote_net
+                    + time_compare_insert_remote_net
+                    + [
+                        sum(client_metrics[client]["TIME_TO_SEND_ORDER_NET"])
+                        for client in client_metrics
+                    ],
+                ),
+                "TOTAL_TIME_EXCHANGE_NET": sum(time_match_orders_net),
             }
         )
 

@@ -4,6 +4,7 @@
 from typing import Any, List, Tuple
 from argparse import ArgumentParser
 from pathlib import Path
+from statistics import mean, stdev
 import json
 
 import matplotlib.pyplot as plot
@@ -15,8 +16,9 @@ def visualize(
     filename: str,
     size: Tuple[int, int],
     labels: Tuple[str, str],
+    ylim: int = None,
 ) -> None:
-    plot.style.use("_mpl-gallery")
+    plot.style.use("ggplot")
 
     for key in key_components:
         data = data[key]
@@ -31,9 +33,21 @@ def visualize(
     fig, axs = plot.subplots(nrows=nrows, ncols=ncols, figsize=size, tight_layout=True)
 
     if (nrows, ncols) == (1, 1):
-        axs.plot(data.keys(), data.values())
-        axs.set_title(key_components[-1])
-        fig.suptitle(key_components[-2])
+        values = []
+        value_dev = []
+        for value in data.values():
+            values.append(mean(value) if value else 0)
+            value_dev.append(stdev(value) if value else 0)
+
+        axs.bar(
+            data.keys(),
+            values,
+            yerr=value_dev,
+            log=2,
+            capsize=5,
+        )
+        _max_y = max(values)
+
         if labels[0]:
             axs.set_xlabel(labels[0])
 
@@ -41,18 +55,27 @@ def visualize(
             axs.set_ylabel(labels[1])
     else:
         fig.suptitle(key_components[-1])
+        _max_y = 0
         if nrows == 1:
             axs = [axs]
         for y_index, row in enumerate(axs):
             for x_index, col in enumerate(row):
                 results = list(data.values())[x_index + (y_index * 2)]
-                col.plot(results.keys(), results.values())
+                if max(map(max, results.values())) > _max_y:
+                    _max_y = max(map(max, results.values()))
+
+                col.bar(results.keys(), results.values(), log=2)
                 col.set_title(list(data.keys())[x_index + (y_index * 2)])
                 if labels[0]:
                     col.set_xlabel(labels[0])
 
                 if labels[1]:
                     col.set_ylabel(labels[1])
+
+    if ylim:
+        plot.setp(axs, ylim=[0, ylim])
+    else:
+        plot.setp(axs, ylim=[0, _max_y])
 
     if filename:
         plot.savefig(filename)
@@ -112,6 +135,9 @@ if __name__ == "__main__":
         default="line",
         choices=["line"],
     )
+    parser.add_argument(
+        "-l", "--limit", help="The maximum limit of the y-axis", type=int
+    )
     args = parser.parse_args()
 
     _path = Path(args.input_file)
@@ -132,4 +158,5 @@ if __name__ == "__main__":
         filename=args.output_file,
         size=(args.figure_size_x, args.figure_size_y),
         labels=(args.x_label, args.y_label),
+        ylim=args.limit,
     )

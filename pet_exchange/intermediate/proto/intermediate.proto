@@ -92,8 +92,8 @@ message KeyGenRequest {
 message KeyGenReply {
     bytes context = 1;
     bytes public = 2;
-    bytes secret = 3;  // TODO: Remove this, only used for debugging
-    bytes relin  = 4;
+    bytes relin  = 3;
+    float duration = 4;
 }
 
 // EncryptOrder
@@ -105,6 +105,7 @@ message EncryptOrderRequest {
 
 message EncryptOrderReply {
     CiphertextOrder order = 1;
+    float duration = 2;
 }
 
 // EncryptOrderBook
@@ -131,6 +132,7 @@ message DecryptOrderReply {
     PlaintextOrder order = 1;
     string entity_bid = 2;
     string entity_ask = 3;
+    float duration = 4;
 }
 
 // DecryptOrderBook
@@ -158,11 +160,12 @@ message GetMinimumValueRequest {
 }
 
 message ChallengeResult {
-    bool minimum = 1; // TODO: This could be a bool or something instead to lower overhead
+    bool minimum = 1;
 }
 
 message GetMinimumValueReply {
    repeated ChallengeResult challenges = 1;
+   float duration = 2;
 }
 
 // GetMinimumValuePlainRequest
@@ -179,9 +182,10 @@ message GetMinimumValuePlainRequest {
 }
 
 message ChallengePlainResult {
-    bool minimum = 1; // TODO: This could be a bool or something instead to lower overhead
+    bool minimum = 1;
 }
 
 message GetMinimumValuePlainReply {
    repeated ChallengePlainResult challenges = 1;
+   float duration = 2;
 }

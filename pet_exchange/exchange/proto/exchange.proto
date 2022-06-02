@@ -97,6 +97,7 @@ message AddOrderLimitRequest {
 
 message AddOrderLimitReply {
     string uuid = 1;
+    float duration = 2;
 }
 
 // AddOrderLimitPlainRequest
@@ -108,6 +109,7 @@ message AddOrderLimitPlainRequest {
 
 message AddOrderLimitPlainReply {
     string uuid = 1;
+    float duration = 2;
 }
 
 // AddOrderMarketRequest
@@ -119,6 +121,7 @@ message AddOrderMarketRequest {
 
 message AddOrderMarketReply {
     string uuid = 1;
+    float duration = 2;
 }
 
 // AddOrderMarketPlainRequest
@@ -130,6 +133,7 @@ message AddOrderMarketPlainRequest {
 
 message AddOrderMarketPlainReply {
     string uuid = 1;
+    float duration = 2;
 }
 
 // GetPublicKeyRequest
@@ -141,7 +145,7 @@ message GetPublicKeyRequest {
 
 message GetPublicKeyReply {
     bytes public = 1;
-    bytes secret = 2;
+    float duration = 2;
 }
 
 // GetMinimumValueRequest

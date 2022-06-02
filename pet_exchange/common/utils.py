@@ -10,7 +10,7 @@ from pet_exchange.common.crypto import CKKS
 from pet_exchange.proto.intermediate_pb2 import Challenge, ChallengePlain
 
 # Remove secret key from message and also look into compression for bytes
-MAX_GRPC_MESSAGE_LENGTH = 50000000
+MAX_GRPC_MESSAGE_LENGTH = 70000000
 
 
 def generate_identifier() -> str:

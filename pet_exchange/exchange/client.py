@@ -19,6 +19,8 @@ class ExchangeClient:
         self.listen_addr = listen_addr
         self.channel = channel
 
+        self.timings = {}  # TODO: Implement this
+
         if self.channel is not None:
             self.stub = grpc_services_intermediate.IntermediateProtoStub(self.channel)
 

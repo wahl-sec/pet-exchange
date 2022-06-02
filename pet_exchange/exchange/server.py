@@ -90,6 +90,7 @@ class ExchangeServer(grpc_services.ExchangeProtoServicer):
             context=context,
         )
 
+        start_time = time.time()
         # TODO: This needs to change if we want to be able to key-switch
         if request.instrument not in self._matcher.pyfhel:
             _pyfhel = Pyfhel()
@@ -97,7 +98,7 @@ class ExchangeServer(grpc_services.ExchangeProtoServicer):
 
             _pyfhel.from_bytes_context(_key.context)
             _pyfhel.from_bytes_public_key(_key.public)
-            _pyfhel.from_bytes_secret_key(_key.secret)
+            # _pyfhel.from_bytes_secret_key(_key.secret)
             _pyfhel.from_bytes_relin_key(_key.relin)
 
             self._matcher.keys[request.instrument] = _key.public
@@ -107,7 +108,9 @@ class ExchangeServer(grpc_services.ExchangeProtoServicer):
                 pyfhel=_pyfhel, compress=self._compress
             )
 
-        return grpc_buffer.GetPublicKeyReply(public=_key.public)
+        return grpc_buffer.GetPublicKeyReply(
+            public=_key.public, duration=_key.duration + (time.time() - start_time)
+        )
 
     @route_logger(grpc_buffer.AddOrderLimitReply)
     async def AddOrderLimit(
@@ -115,6 +118,7 @@ class ExchangeServer(grpc_services.ExchangeProtoServicer):
         request: grpc_buffer.AddOrderLimitRequest,
         context: grpc.aio.ServicerContext,
     ) -> grpc_buffer.AddOrderLimitReply:
+        start_time = time.time()
         _order_book = self._matcher.book.setdefault(
             request.order.instrument,
             EncryptedOrderBook(
@@ -124,7 +128,8 @@ class ExchangeServer(grpc_services.ExchangeProtoServicer):
         )
 
         return grpc_buffer.AddOrderLimitReply(
-            uuid=_order_book.add(order=request.order, matcher=self._matcher)
+            uuid=_order_book.add(order=request.order, matcher=self._matcher),
+            duration=time.time() - start_time,
         )
 
     @route_logger(grpc_buffer.AddOrderLimitPlainReply)
@@ -133,6 +138,7 @@ class ExchangeServer(grpc_services.ExchangeProtoServicer):
         request: grpc_buffer.AddOrderLimitPlainRequest,
         context: grpc.aio.ServicerContext,
     ) -> grpc_buffer.AddOrderLimitPlainReply:
+        start_time = time.time()
         _order_book = self._matcher.book.setdefault(
             request.order.instrument,
             OrderBook(
@@ -142,7 +148,8 @@ class ExchangeServer(grpc_services.ExchangeProtoServicer):
         )
 
         return grpc_buffer.AddOrderLimitPlainReply(
-            uuid=_order_book.add(order=request.order, matcher=self._matcher)
+            uuid=_order_book.add(order=request.order, matcher=self._matcher),
+            duration=time.time() - start_time,
         )
 
     @route_logger(grpc_buffer.AddOrderMarketReply)
@@ -151,6 +158,7 @@ class ExchangeServer(grpc_services.ExchangeProtoServicer):
         request: grpc_buffer.AddOrderMarketRequest,
         context: grpc.aio.ServicerContext,
     ) -> grpc_buffer.AddOrderMarketReply:
+        start_time = time.time()
         _order_book = self._matcher.book.setdefault(
             request.order.instrument,
             EncryptedOrderBook(
@@ -160,7 +168,8 @@ class ExchangeServer(grpc_services.ExchangeProtoServicer):
         )
 
         return grpc_buffer.AddOrderMarketReply(
-            uuid=_order_book.add(order=request.order, matcher=self._matcher)
+            uuid=_order_book.add(order=request.order, matcher=self._matcher),
+            duration=time.time() - start_time,
         )
 
     @route_logger(grpc_buffer.AddOrderMarketPlainReply)
@@ -169,6 +178,7 @@ class ExchangeServer(grpc_services.ExchangeProtoServicer):
         request: grpc_buffer.AddOrderMarketPlainRequest,
         context: grpc.aio.ServicerContext,
     ) -> grpc_buffer.AddOrderMarketPlainReply:
+        start_time = time.time()
         _order_book = self._matcher.book.setdefault(
             request.order.instrument,
             OrderBook(
@@ -178,7 +188,8 @@ class ExchangeServer(grpc_services.ExchangeProtoServicer):
         )
 
         return grpc_buffer.AddOrderMarketPlainReply(
-            uuid=_order_book.add(order=request.order, matcher=self._matcher)
+            uuid=_order_book.add(order=request.order, matcher=self._matcher),
+            duration=time.time() - start_time,
         )
 
 

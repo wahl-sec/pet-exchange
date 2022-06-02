@@ -100,19 +100,22 @@ class OrderBook:
         self._locked_bid = True
         lo = 0
         hi = len(self._book_bid)
+        total_duration = 0
         while lo < hi:
             mid = (lo + hi) // 2
 
             _identifier, _order = list(self._book_bid.items())[mid]
-            result = matcher.compare_fn(
-                first=(_identifier, _order),
-                second=(identifier, order),
+            result, duration = matcher.compare_fn(
+                first=(_identifier, _order.price),
+                second=(identifier, order.price),
                 instrument=self._instrument,
                 cache=self._book_compared,
                 correct_counter=[],
                 total_counter=[],
                 total_timings=[],
+                inserting=True,
             )
+            total_duration += duration
 
             if result == -1:
                 hi = mid
@@ -129,6 +132,14 @@ class OrderBook:
             value={
                 "type": "bid",
                 "timings": [end_time_to_insert - start_time_to_insert],
+            },
+        )
+        self.add_metrics(
+            category="sorting",
+            section="insert_net",
+            value={
+                "type": "bid",
+                "timings": [total_duration],
             },
         )
 
@@ -155,19 +166,22 @@ class OrderBook:
         # bisect https://github.com/python/cpython/blob/3.10/Lib/bisect.py
         lo = 0
         hi = len(self._book_ask)
+        total_duration = 0
         while lo < hi:
             mid = (lo + hi) // 2
 
             _identifier, _order = list(self._book_ask.items())[mid]
-            result = matcher.compare_fn(
-                first=(identifier, order),
-                second=(_identifier, _order),
+            result, duration = matcher.compare_fn(
+                first=(identifier, order.price),
+                second=(_identifier, _order.price),
                 instrument=self._instrument,
                 cache=self._book_compared,
                 correct_counter=[],
                 total_counter=[],
                 total_timings=[],
+                inserting=True,
             )
+            total_duration += duration
 
             if result == -1:
                 hi = mid
@@ -183,10 +197,17 @@ class OrderBook:
             section="insert",
             value={
                 "type": "ask",
-                "duration": end_time_to_insert - start_time_to_insert,
+                "timings": [end_time_to_insert - start_time_to_insert],
             },
         )
-
+        self.add_metrics(
+            category="sorting",
+            section="insert_net",
+            value={
+                "type": "ask",
+                "timings": [total_duration],
+            },
+        )
         self._locked_ask = False
         # self._book_ask[identifier] = order
 

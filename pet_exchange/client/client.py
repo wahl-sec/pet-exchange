@@ -78,6 +78,7 @@ async def client(
         "MIN_TIME_TO_GET_PUBLIC_KEY": None,
         "AVERAGE_TIME_TO_GET_PUBLIC_KEY": None,
         "TIME_TO_GET_PUBLIC_KEY": [],
+        "TIME_TO_GET_PUBLIC_KEY_NET": [],
         "MAX_TIME_TO_PROCESS_ORDER": None,
         "MIN_TIME_TO_PROCESS_ORDER": None,
         "AVERAGE_TIME_TO_PROCESS_ORDER": None,
@@ -86,6 +87,7 @@ async def client(
         "MIN_TIME_TO_SEND_ORDER": None,
         "AVERAGE_TIME_TO_SEND_ORDER": None,
         "TIME_TO_SEND_ORDER": [],
+        "TIME_TO_SEND_ORDER_NET": [],
         "AVERAGE_SIZE_OF_ORDER": None,
         "MAX_SIZE_OF_ORDER": None,
         "MIN_SIZE_OF_ORDER": None,
@@ -106,7 +108,10 @@ async def client(
         ],
     ) as channel:
         logger.info(f"Client '{client}': Waiting for exchange to wake up ...")
+        start_wait_time = time.time()
         await channel.channel_ready()
+        end_wait_time = time.time()
+
         stub = grpc_services.ExchangeProtoStub(channel)
 
         _message: Union[stub.AddOrder, stub.AddOrderPlain] = (
@@ -172,6 +177,9 @@ async def client(
                     )
                     end_time = time.time()
                     metrics["TIME_TO_GET_PUBLIC_KEY"].append(end_time - start_time)
+                    metrics["TIME_TO_GET_PUBLIC_KEY_NET"].append(
+                        end_time - start_time - _key.duration
+                    )
 
                     _pyfhel = Pyfhel()
                     _pyfhel.contextGen(scheme="CKKS", **CKKS_PARAMETERS)
@@ -261,7 +269,11 @@ async def client(
                     start_time = time.time()
                     response = await _message(_request(order=_processed_order))
                     end_time = time.time()
+
                     metrics["TIME_TO_SEND_ORDER"].append(end_time - start_time)
+                    metrics["TIME_TO_SEND_ORDER_NET"].append(
+                        end_time - start_time - response.duration
+                    )
                 except Exception as e:
                     print(e)
                 logger.debug(
@@ -287,7 +299,10 @@ async def client(
 
             metrics.update(
                 {
-                    "MAX_TIME_TO_GET_PUBLIC_KEY": max(metrics["TIME_TO_GET_PUBLIC_KEY"])
+                    "EXCHANGE_WAIT_TIME": end_wait_time - start_wait_time,
+                    "WAIT_TIMEMAX_TIME_TO_GET_PUBLIC_KEY": max(
+                        metrics["TIME_TO_GET_PUBLIC_KEY"]
+                    )
                     if metrics["TIME_TO_GET_PUBLIC_KEY"]
                     else None,
                     "MIN_TIME_TO_GET_PUBLIC_KEY": min(metrics["TIME_TO_GET_PUBLIC_KEY"])
@@ -299,16 +314,44 @@ async def client(
                     )
                     if metrics["TIME_TO_GET_PUBLIC_KEY"]
                     else None,
+                    "MAX_TIME_TO_GET_PUBLIC_KEY_NET": max(
+                        metrics["TIME_TO_GET_PUBLIC_KEY_NET"]
+                    )
+                    if metrics["TIME_TO_GET_PUBLIC_KEY_NET"]
+                    else None,
+                    "MIN_TIME_TO_GET_PUBLIC_KEY_NET": min(
+                        metrics["TIME_TO_GET_PUBLIC_KEY_NET"]
+                    )
+                    if metrics["TIME_TO_GET_PUBLIC_KEY_NET"]
+                    else None,
+                    "AVERAGE_TIME_TO_GET_PUBLIC_KEY_NET": (
+                        sum(metrics["TIME_TO_GET_PUBLIC_KEY_NET"])
+                        / len(metrics["TIME_TO_GET_PUBLIC_KEY_NET"])
+                    )
+                    if metrics["TIME_TO_GET_PUBLIC_KEY_NET"]
+                    else None,
                     "MAX_TIME_TO_PROCESS_ORDER": max(metrics["TIME_TO_PROCESS_ORDER"]),
                     "MIN_TIME_TO_PROCESS_ORDER": min(metrics["TIME_TO_PROCESS_ORDER"]),
                     "AVERAGE_TIME_TO_PROCESS_ORDER": sum(
                         metrics["TIME_TO_PROCESS_ORDER"]
                     )
                     / len(metrics["TIME_TO_PROCESS_ORDER"]),
+                    "TIME_TO_SEND_ORDER": metrics["TIME_TO_SEND_ORDER"],
                     "MAX_TIME_TO_SEND_ORDER": max(metrics["TIME_TO_SEND_ORDER"]),
                     "MIN_TIME_TO_SEND_ORDER": min(metrics["TIME_TO_SEND_ORDER"]),
                     "AVERAGE_TIME_TO_SEND_ORDER": sum(metrics["TIME_TO_SEND_ORDER"])
                     / len(metrics["TIME_TO_SEND_ORDER"]),
+                    "TIME_TO_SEND_ORDER_NET": metrics["TIME_TO_SEND_ORDER_NET"],
+                    "MAX_TIME_TO_SEND_ORDER_NET": max(
+                        metrics["TIME_TO_SEND_ORDER_NET"]
+                    ),
+                    "MIN_TIME_TO_SEND_ORDER_NET": min(
+                        metrics["TIME_TO_SEND_ORDER_NET"]
+                    ),
+                    "AVERAGE_TIME_TO_SEND_ORDER_NET": sum(
+                        metrics["TIME_TO_SEND_ORDER_NET"]
+                    )
+                    / len(metrics["TIME_TO_SEND_ORDER_NET"]),
                     "AVERAGE_SIZE_OF_ORDER": sum(metrics["SIZE_OF_ORDER"])
                     / len(metrics["SIZE_OF_ORDER"]),
                     "MAX_SIZE_OF_ORDER": max(metrics["SIZE_OF_ORDER"]),

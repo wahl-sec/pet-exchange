@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from typing import NoReturn, List, Optional
+from typing import NoReturn, List, Optional, Dict
 from concurrent.futures import ThreadPoolExecutor, Future, as_completed
 from pathlib import Path
 import logging
 import json
+import time
 
 import grpc
 import pet_exchange.proto.intermediate_pb2 as grpc_buffer
@@ -69,17 +70,21 @@ class IntermediateServer(grpc_services.IntermediateProtoServicer):
     async def KeyGen(
         self, request: grpc_buffer.KeyGenRequest, context: grpc.aio.ServicerContext
     ) -> grpc_buffer.KeyGenReply:
+        start_time = time.time()
+
         handler = self._key_engine.generate_key_handler(
             instrument=request.instrument,
             compress=self._compress,
             precision=self._precision,
         )
         self._write_output(instrument=request.instrument)
+
+        end_time = time.time()
         return grpc_buffer.KeyGenReply(
             context=handler.key_pair.context,
             public=handler.key_pair.public,
-            secret=handler.key_pair.secret,
             relin=handler.key_pair.relin,
+            duration=time.time() - start_time,
         )
 
     @route_logger(grpc_buffer.EncryptOrderReply)
@@ -88,9 +93,11 @@ class IntermediateServer(grpc_services.IntermediateProtoServicer):
         request: grpc_buffer.EncryptOrderRequest,
         context: grpc.aio.ServicerContext,
     ) -> grpc_buffer.EncryptOrderReply:
+        start_time = time.time()
         handler = self._key_engine.key_handler(instrument=request.order.instrument)
+        order = handler.encrypt(plaintext=request.order)
         return grpc_buffer.EncryptOrderReply(
-            order=handler.encrypt(plaintext=request.order),
+            order=order, duration=time.time() - start_time
         )
 
     @route_logger(grpc_buffer.EncryptOrderBookReply)
@@ -110,23 +117,32 @@ class IntermediateServer(grpc_services.IntermediateProtoServicer):
         request: grpc_buffer.DecryptOrderRequest,
         context: grpc.aio.ServicerContext,
     ) -> grpc_buffer.DecryptOrderReply:
+        start_time = time.time()
         handler = self._key_engine.key_handler(instrument=request.order.instrument)
-        return grpc_buffer.DecryptOrderReply(
-            order=handler.decrypt(ciphertext=request.order),
-            entity_bid=(
-                handler.crypto.decrypt_string(request.entity_bid)
-                if self._encrypt_entity
-                else request.entity_bid
-            )
+
+        order = handler.decrypt(ciphertext=request.order)
+
+        handler_bid = (
+            handler.crypto.decrypt_string(request.entity_bid)
+            if self._encrypt_entity
+            else request.entity_bid
             if hasattr(request, "entity_bid")
-            else None,
-            entity_ask=(
-                handler.crypto.decrypt_string(request.entity_ask)
-                if self._encrypt_entity
-                else request.entity_ask
-            )
+            else None
+        )
+
+        handler_ask = (
+            handler.crypto.decrypt_string(request.entity_ask)
+            if self._encrypt_entity
+            else request.entity_ask
             if hasattr(request, "entity_ask")
-            else None,
+            else None
+        )
+
+        return grpc_buffer.DecryptOrderReply(
+            order=order,
+            entity_bid=handler_bid,
+            entity_ask=handler_ask,
+            duration=time.time() - start_time,
         )
 
     @route_logger(grpc_buffer.DecryptOrderBookReply)
@@ -144,6 +160,7 @@ class IntermediateServer(grpc_services.IntermediateProtoServicer):
     def GetMinimumValue(
         self, request: grpc_buffer.GetMinimumValueRequest, context: grpc.ServicerContext
     ) -> grpc_buffer.GetMinimumValueReply:
+        start_time = time.time()
         handler = self._key_engine.key_handler(instrument=request.instrument)
 
         def compare(first, second):
@@ -168,7 +185,9 @@ class IntermediateServer(grpc_services.IntermediateProtoServicer):
                 index = future_to_challenges[future]
                 _challenges[index] = future.result()
 
-        return grpc_buffer.GetMinimumValueReply(challenges=_challenges)
+        return grpc_buffer.GetMinimumValueReply(
+            challenges=_challenges, duration=time.time() - start_time
+        )
 
     @route_logger_sync(grpc_buffer.GetMinimumValuePlainReply)
     def GetMinimumValuePlain(
@@ -176,6 +195,8 @@ class IntermediateServer(grpc_services.IntermediateProtoServicer):
         request: grpc_buffer.GetMinimumValuePlainRequest,
         context: grpc.ServicerContext,
     ) -> grpc_buffer.GetMinimumValuePlainReply:
+        start_time = time.time()
+
         def compare(first, second):
             return grpc_buffer.ChallengeResult(minimum=first < second)
 
@@ -191,7 +212,9 @@ class IntermediateServer(grpc_services.IntermediateProtoServicer):
                 index = future_to_challenges[future]
                 _challenges[index] = future.result()
 
-        return grpc_buffer.GetMinimumValueReply(challenges=_challenges)
+        return grpc_buffer.GetMinimumValueReply(
+            challenges=_challenges, duration=time.time() - start_time
+        )
 
     def _write_output(self, instrument: str) -> None:
         """Writes the output of the current metrics for a certain instrument to a JSON file"""

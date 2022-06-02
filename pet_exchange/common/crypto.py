@@ -12,10 +12,10 @@ import numpy as np
 # qs - coefficient modulus sizes - used by SEAL to generate a list of primes of those binary sizes, size of ciphertext elements, length of list indicates the multiplicative depth (level) of the scheme, bigger is worse (security)
 # scale - scaling factor - defines encoding precision for the binary representation of coefficients, bigger is better (precision), bigger is worse (performance?)`
 CKKS_PARAMETERS = {
-    "n": 2**14,
-    # "qs": [52] + [45] * 0,  # CKKS-11, CKKS-12 (2**11 (128), 2**12 (256))
-    "qs": [52] + [45] * 6,  # CKKS-14 (2**14 (128))
-    # "qs": [45] + [32] * 6,  # CKKS-14 (2**14 (256))
+    "n": 2**11,
+    "qs": [52] + [45] * 0,  # CKKS-11, CKKS-12 (2**11 (128), 2**12 (256))
+    # "qs": [52] + [45] * 6,  # CKKS-14 (2**14 (128))
+    # "qs": [52] + [45] * 6,  # CKKS-15 (2**15 (256))
     # "qs": [24] + [23] * 18,
     "scale": 2**45,
 }

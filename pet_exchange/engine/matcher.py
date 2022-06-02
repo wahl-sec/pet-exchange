@@ -7,7 +7,6 @@ from copy import deepcopy, copy
 from datetime import datetime
 from random import randint
 from pathlib import Path
-from math import comb
 import logging
 import json
 import time
@@ -71,8 +70,6 @@ class MatchingEngine:
             self.compare_constant_count = compare_constant_count
             self.compare_sigmoid_iterations = compare_sigmoid_iterations
 
-        self.matcher_start_time = time.time()
-
         # Cache storing the instrument to length of book to see if something has updated
         self._cache_bid: Dict[str, int] = {}
         self._cache_ask: Dict[str, int] = {}
@@ -107,6 +104,8 @@ class MatchingEngine:
         book: EncryptedOrderBook,
         timings: Dict[str, List[float]],
     ) -> Tuple[EncryptedOrderBook, List[str], List[str]]:
+        start_match_time = time.time()
+
         bid_queue = book.queue(type=OrderType.BID)
         ask_queue = book.queue(type=OrderType.ASK)
         b_dropped, a_dropped = [], []
@@ -145,8 +144,6 @@ class MatchingEngine:
                     )
                     return book, b_dropped, a_dropped
 
-            start_match_time = time.time()
-
             if hash(b_order.volume) not in crypto._depth_map:
                 b_order_volume = crypto.from_bytes(ctxt=b_order.volume)
                 crypto._depth_map[hash(b_order_volume)] = 1
@@ -174,10 +171,10 @@ class MatchingEngine:
             _price_pad = crypto.encode_float(values=[generate_random_float()])
             crypto._depth_map[hash(_price_pad)] = 1
 
-            start_time = time.time()
+            start_time_pad = time.time()
             b_otp_price = crypto.encrypt_add_plain_float(b_order_price, _price_pad)
-            end_time = time.time()
-            timings["TIME_TO_PAD_ORDER_PRICE_BID"].append(end_time - start_time)
+            end_time_pad = time.time()
+            timings["TIME_TO_PAD_ORDER_PRICE_BID"].append(end_time_pad - start_time_pad)
 
             start_time = time.time()
             a_otp_price = crypto.encrypt_add_plain_float(
@@ -187,12 +184,13 @@ class MatchingEngine:
             end_time = time.time()
             timings["TIME_TO_PAD_ORDER_PRICE_ASK"].append(end_time - start_time)
 
-            start_time = time.time()
+            """
+            start_time_gen = time.time()
             expected, challenges = generate_challenges(
                 engine=crypto, n=self.challenge_count
             )
-            end_time = time.time()
-            timings["TIME_TO_GENERATE_CHALLENGES"].append(end_time - start_time)
+            end_time_gen = time.time()
+            timings["TIME_TO_GENERATE_CHALLENGES"].append(end_time_gen - start_time_gen)
             index = randint(0, len(challenges) - 1) if len(challenges) > 0 else 0
             _challenges: List[Challenge] = (
                 challenges[:index]
@@ -206,12 +204,18 @@ class MatchingEngine:
             )
             timings["SIZE_OF_CHALLENGE"].append(sys.getsizeof(_challenges[0]))
 
-            start_time = time.time()
+            start_time_min_p = time.time()
             challenges = self._intermediate_channel.GetMinimumValue(
                 challenges=_challenges, instrument=instrument, encoding="float"
-            ).challenges
-            end_time = time.time()
-            timings["TIME_TO_GET_MINIMUM_VALUE_PRICE"].append(end_time - start_time)
+            )
+            challenges, duration_price = challenges.challenges, challenges.duration
+            end_time_min_p = time.time()
+            duration_price = end_time_min_p - start_time_min_p - duration_price
+
+            timings["TIME_TO_GET_MINIMUM_VALUE_PRICE"].append(
+                end_time_min_p - start_time_min_p
+            )
+            timings["TIME_TO_GET_MINIMUM_VALUE_PRICE_NET"].append(duration_price)
 
             results: List[int] = []
             for _index, challenge in enumerate(challenges):
@@ -228,7 +232,19 @@ class MatchingEngine:
             _minimum_price = (
                 b_order_price if challenges[index].minimum else a_order_price
             )
+            """
 
+            _minimum_price, duration_price = self.compare_fn(
+                (b_identifier, b_otp_price),
+                (a_identifier, a_otp_price),
+                instrument=instrument,
+                cache={"direct": {}, "indirect": {}},
+                correct_counter=[],
+                total_counter=[],
+                total_timings=[],
+            )
+
+            _minimum_price = b_order_price if _minimum_price == -1 else a_order_price
             if b_order_price == _minimum_price and a_order_price != _minimum_price:
                 logger.info(
                     f"{self.__name__} ({instrument}): No more matches possible ..."
@@ -238,27 +254,38 @@ class MatchingEngine:
                 _volume_pad = crypto.encode_float(values=[float(generate_random_int())])
                 crypto._depth_map[hash(_volume_pad)] = 1
 
-                start_time = time.time()
+                start_time_pad = time.time()
                 b_otp_volume = crypto.encrypt_add_plain_float(
                     b_order_volume, _volume_pad
                 )
-                end_time = time.time()
-                timings["TIME_TO_PAD_ORDER_VOLUME_BID"].append(end_time - start_time)
+                end_time_pad = time.time()
+                timings["TIME_TO_PAD_ORDER_VOLUME_BID"].append(
+                    end_time_pad - start_time_pad
+                )
 
-                start_time = time.time()
+                start_time_pad = time.time()
                 a_otp_volume = crypto.encrypt_add_plain_float(
                     a_order_volume, _volume_pad
                 )
-                end_time = time.time()
-                timings["TIME_TO_PAD_ORDER_VOLUME_ASK"].append(end_time - start_time)
-
-                start_time = time.time()
-                expected, challenges = generate_challenges(
-                    engine=crypto, n=self.challenge_count
+                end_time_pad = time.time()
+                timings["TIME_TO_PAD_ORDER_VOLUME_ASK"].append(
+                    end_time_pad - start_time_pad
                 )
-                end_time = time.time()
-                timings["TIME_TO_GENERATE_CHALLENGES"].append(end_time - start_time)
 
+                _minimum_volume, duration_volume = self.compare_fn(
+                    (b_identifier, b_otp_volume),
+                    (a_identifier, a_otp_volume),
+                    instrument=instrument,
+                    cache={"direct": {}, "indirect": {}},
+                    correct_counter=[],
+                    total_counter=[],
+                    total_timings=[],
+                )
+
+                _minimum_volume = (
+                    b_order_volume if _minimum_volume == -1 else a_order_volume
+                )
+                """
                 index = randint(0, len(challenges) - 1) if len(challenges) > 0 else 0
                 _challenges: List[Challenge] = (
                     challenges[:index]
@@ -270,14 +297,18 @@ class MatchingEngine:
                     ]
                     + challenges[index:]
                 )
-                start_time = time.time()
+                start_time_min_v = time.time()
                 challenges = self._intermediate_channel.GetMinimumValue(
                     challenges=_challenges, instrument=instrument, encoding="float"
-                ).challenges
-                end_time = time.time()
-                timings["TIME_TO_GET_MINIMUM_VALUE_VOLUME"].append(
-                    end_time - start_time
                 )
+                challenges, duration_volume = challenges.challenges, challenges.duration
+                end_time_min_v = time.time()
+                duration_volume = end_time_min_v - start_time_min_v - duration_volume
+
+                timings["TIME_TO_GET_MINIMUM_VALUE_VOLUME"].append(
+                    end_time_min_v - start_time_min_v
+                )
+                timings["TIME_TO_GET_MINIMUM_VALUE_VOLUME_NET"].append(duration_volume)
 
                 results: List[int] = []
                 for _index, challenge in enumerate(challenges):
@@ -294,6 +325,7 @@ class MatchingEngine:
                 _minimum_volume = (
                     b_order_volume if challenges[index].minimum else a_order_volume
                 )
+                """
 
                 b_order_c, a_order_c = deepcopy(b_order), deepcopy(a_order)
                 if b_order_volume == _minimum_volume:
@@ -318,9 +350,12 @@ class MatchingEngine:
 
                 end_match_time = time.time()
                 timings["TIME_TO_MATCH_ORDER"].append(end_match_time - start_match_time)
+                timings["TIME_TO_MATCH_ORDER_NET"].append(
+                    duration_price + duration_volume
+                )
                 timings["SIZE_OF_ORDER"].append(sys.getsizeof(b_order))
 
-                start_time = time.time()
+                start_time_dec = time.time()
                 d_order = self._intermediate_channel.DecryptOrder(
                     order=grpc_buffer_intermediate.CiphertextOrder(
                         type=a_order.type,
@@ -331,8 +366,11 @@ class MatchingEngine:
                     entity_bid=b_order.entity,
                     entity_ask=a_order.entity,
                 )
-                end_time = time.time()
-                timings["TIME_TO_DECRYPT_ORDER"].append(end_time - start_time)
+                end_time_dec = time.time()
+                duration_d = end_time_dec - start_time_dec - d_order.duration
+
+                timings["TIME_TO_DECRYPT_ORDER"].append(end_time_dec - start_time_dec)
+                timings["TIME_TO_DECRYPT_ORDER_NET"].append(duration_d)
 
                 logger.log(
                     level=TRADE_LOG_LEVEL,
@@ -360,6 +398,8 @@ class MatchingEngine:
         timings: Dict[str, List[float]],
         remote_compare: bool,
     ) -> Tuple[OrderBook, List[str], List[str]]:
+        start_match_time = time.time()
+
         bid_queue = book.queue(type=OrderType.BID)
         ask_queue = book.queue(type=OrderType.ASK)
         b_dropped, a_dropped = [], []
@@ -395,26 +435,30 @@ class MatchingEngine:
                     )
                     return book, b_dropped, a_dropped
 
-            start_match_time = time.time()
-
             _price_pad = generate_random_float()
             if remote_compare:
-                start_time = time.time()
+                start_time_pad = time.time()
                 a_otp_price = a_order.price + _price_pad
-                end_time = time.time()
-                timings["TIME_TO_PAD_ORDER_PRICE_ASK"].append(end_time - start_time)
+                end_time_pad = time.time()
+                timings["TIME_TO_PAD_ORDER_PRICE_ASK"].append(
+                    end_time_pad - start_time_pad
+                )
 
-                start_time = time.time()
+                start_time_pad = time.time()
                 b_otp_price = b_order.price + _price_pad
-                end_time = time.time()
-                timings["TIME_TO_PAD_ORDER_PRICE_BID"].append(end_time - start_time)
+                end_time_pad = time.time()
+                timings["TIME_TO_PAD_ORDER_PRICE_BID"].append(
+                    end_time_pad - start_time_pad
+                )
 
-                start_time = time.time()
+                start_time_gen = time.time()
                 expected, challenges = generate_challenges(
                     engine=None, n=self.challenge_count
                 )
-                end_time = time.time()
-                timings["TIME_TO_GENERATE_CHALLENGES"].append(end_time - start_time)
+                end_time_gen = time.time()
+                timings["TIME_TO_GENERATE_CHALLENGES"].append(
+                    end_time_gen - start_time_gen
+                )
 
                 index = randint(0, len(challenges) - 1) if len(challenges) > 0 else 0
                 _challenges: List[ChallengePlain] = (
@@ -429,12 +473,18 @@ class MatchingEngine:
                 )
                 timings["SIZE_OF_CHALLENGE"].append(sys.getsizeof(_challenges[0]))
 
-                start_time = time.time()
+                start_time_min_p = time.time()
                 challenges = self._intermediate_channel.GetMinimumValuePlain(
                     challenges=_challenges, instrument=instrument, encoding="float"
-                ).challenges
-                end_time = time.time()
-                timings["TIME_TO_GET_MINIMUM_VALUE_PRICE"].append(end_time - start_time)
+                )
+                challenges, duration_price = challenges.challenges, challenges.duration
+                end_time_min_p = time.time()
+                duration_price = end_time_min_p - start_time_min_p - duration_price
+
+                timings["TIME_TO_GET_MINIMUM_VALUE"].append(
+                    end_time_min_p - start_time_min_p
+                )
+                timings["TIME_TO_GET_MINIMUM_VALUE_NET"].append(duration_price)
 
                 results: List[int] = []
                 for _index, challenge in enumerate(challenges):
@@ -454,6 +504,7 @@ class MatchingEngine:
             else:
                 a_otp_price = a_order.price + _price_pad
                 b_otp_price = b_order.price + _price_pad
+                duration_price = 0
                 _minimum_otp_price = min(b_otp_price, a_otp_price)
 
             if b_otp_price <= a_otp_price:
@@ -464,26 +515,28 @@ class MatchingEngine:
             else:
                 if remote_compare:
                     _volume_pad = float(generate_random_int())
-                    start_time = time.time()
+                    start_time_pad = time.time()
                     a_otp_volume = a_order.volume + _volume_pad
-                    end_time = time.time()
+                    end_time_pad = time.time()
                     timings["TIME_TO_PAD_ORDER_VOLUME_ASK"].append(
-                        end_time - start_time
+                        end_time_pad - start_time_pad
                     )
 
-                    start_time = time.time()
+                    start_time_pad = time.time()
                     b_otp_volume = b_order.volume + _volume_pad
-                    end_time = time.time()
+                    end_time_pad = time.time()
                     timings["TIME_TO_PAD_ORDER_VOLUME_BID"].append(
-                        end_time - start_time
+                        end_time_pad - start_time_pad
                     )
 
-                    start_time = time.time()
+                    start_time_pad = time.time()
                     expected, challenges = generate_challenges(
                         engine=None, n=self.challenge_count
                     )
-                    end_time = time.time()
-                    timings["TIME_TO_GENERATE_CHALLENGES"].append(end_time - start_time)
+                    end_time_pad = time.time()
+                    timings["TIME_TO_GENERATE_CHALLENGES"].append(
+                        end_time_pad - start_time_pad
+                    )
 
                     index = (
                         randint(0, len(challenges) - 1) if len(challenges) > 0 else 0
@@ -498,14 +551,23 @@ class MatchingEngine:
                         ]
                         + challenges[index:]
                     )
-                    start_time = time.time()
+                    start_time_min_v = time.time()
                     challenges = self._intermediate_channel.GetMinimumValuePlain(
                         challenges=_challenges, instrument=instrument, encoding="float"
-                    ).challenges
-                    end_time = time.time()
-                    timings["TIME_TO_GET_MINIMUM_VALUE_VOLUME"].append(
-                        end_time - start_time
                     )
+                    challenges, duration_volume = (
+                        challenges.challenges,
+                        challenges.duration,
+                    )
+                    end_time_min_v = time.time()
+                    duration_volume = (
+                        end_time_min_v - start_time_min_v - duration_volume
+                    )
+
+                    timings["TIME_TO_GET_MINIMUM_VALUE"].append(
+                        end_time_min_v - start_time_min_v
+                    )
+                    timings["TIME_TO_GET_MINIMUM_VALUE_NET"].append(duration_volume)
 
                     results: List[int] = []
                     for _index, challenge in enumerate(challenges):
@@ -519,17 +581,18 @@ class MatchingEngine:
                             f"Intermediate returned wrong result for comparing padded volume"
                         )
 
-                    start_time = time.time()
+                    start_time_pad = time.time()
                     min_volume = (
                         (b_otp_volume - _volume_pad)
                         if challenges[index].minimum
                         else (a_otp_volume - _volume_pad)
                     )
-                    end_time = time.time()
+                    end_time_pad = time.time()
                     timings["TIME_TO_UNPAD_ORDER_VOLUME_MINIMUM"].append(
-                        end_time - start_time
+                        end_time_pad - start_time_pad
                     )
                 else:
+                    duration_volume = 0
                     min_volume = min(b_order.volume, a_order.volume)
 
                 b_order_c, a_order_c = deepcopy(b_order), deepcopy(a_order)
@@ -547,6 +610,9 @@ class MatchingEngine:
 
                 end_match_time = time.time()
                 timings["TIME_TO_MATCH_ORDER"].append(end_match_time - start_match_time)
+                timings["TIME_TO_MATCH_ORDER_NET"].append(
+                    duration_price + duration_volume
+                )
                 timings["SIZE_OF_ORDER"].append(sys.getsizeof(b_order))
 
                 logger.log(
@@ -595,7 +661,7 @@ class MatchingEngine:
                     correct_counter=correct_counter_bid,
                     total_counter=total_counter_bid,
                     total_timings=total_timings_bid,
-                ),
+                )[0],
             )
             sort_bid_end = time.time()
             correct_counter_bid = sum(correct_counter_bid)
@@ -636,7 +702,7 @@ class MatchingEngine:
                     correct_counter=correct_counter_ask,
                     total_counter=total_counter_ask,
                     total_timings=total_timings_ask,
-                ),
+                )[0],
             )
             sort_ask_end = time.time()
             correct_counter_ask = sum(correct_counter_ask)
@@ -665,7 +731,9 @@ class MatchingEngine:
 
         timings = {
             "TIME_TO_MATCH_ORDER": [],
+            "TIME_TO_MATCH_ORDER_NET": [],
             "TIME_TO_DECRYPT_ORDER": [],
+            "TIME_TO_DECRYPT_ORDER_NET": [],
             "TIME_TO_PAD_ORDER_PRICE_BID": [],
             "TIME_TO_PAD_ORDER_PRICE_ASK": [],
             "TIME_TO_UNPAD_ORDER_PRICE_BID": [],
@@ -675,8 +743,8 @@ class MatchingEngine:
             "TIME_TO_UNPAD_ORDER_VOLUME_BID": [],
             "TIME_TO_UNPAD_ORDER_VOLUME_ASK": [],
             "TIME_TO_GENERATE_CHALLENGES": [],
-            "TIME_TO_GET_MINIMUM_VALUE_PRICE": [],
-            "TIME_TO_GET_MINIMUM_VALUE_VOLUME": [],
+            "TIME_TO_GET_MINIMUM_VALUE": [],
+            "TIME_TO_GET_MINIMUM_VALUE_NET": [],
             "TIME_TO_UNPAD_ORDER_VOLUME_MINIMUM": [],
             "SIZE_OF_CHALLENGE": [],
             "SIZE_OF_ORDER": [],
@@ -696,9 +764,13 @@ class MatchingEngine:
                 remote_compare=not local_sort,
             )
 
-        logger.info(
-            f"Completed matching iteration at: '{time.time() - self.matcher_start_time}'"
+        iteration_time = time.time() - self.matcher_start_time
+        logger.info(f"Completed matching iteration at: '{iteration_time}'")
+
+        self.book[instrument].add_metrics(
+            category="iteration", section="time", value={"timings": [iteration_time]}
         )
+
         self.book[instrument].add_metrics(
             category="size",
             section="order",
@@ -718,6 +790,12 @@ class MatchingEngine:
         )
 
         self.book[instrument].add_metrics(
+            category="match",
+            section="pairs_net",
+            value={"timings": timings["TIME_TO_MATCH_ORDER_NET"]},
+        )
+
+        self.book[instrument].add_metrics(
             category="decrypt",
             section="order",
             value={"timings": timings["TIME_TO_DECRYPT_ORDER"]},
@@ -731,14 +809,14 @@ class MatchingEngine:
 
         self.book[instrument].add_metrics(
             category="minimum",
-            section="price",
-            value={"timings": timings["TIME_TO_GET_MINIMUM_VALUE_PRICE"]},
+            section="value",
+            value={"timings": timings["TIME_TO_GET_MINIMUM_VALUE"]},
         )
 
         self.book[instrument].add_metrics(
             category="minimum",
-            section="volume",
-            value={"timings": timings["TIME_TO_GET_MINIMUM_VALUE_VOLUME"]},
+            section="value_net",
+            value={"timings": timings["TIME_TO_GET_MINIMUM_VALUE_NET"]},
         )
 
         self.book[instrument].add_metrics(
@@ -813,21 +891,17 @@ class MatchingEngine:
 
     def _compare_local(
         self,
-        first: Tuple[
-            str,
-            Union[grpc_buffer.PlaintextLimitOrder, grpc_buffer.PlaintextMarketOrder],
-        ],
-        second: Tuple[
-            str,
-            Union[grpc_buffer.PlaintextLimitOrder, grpc_buffer.PlaintextMarketOrder],
-        ],
+        first: Tuple[str, bytes],
+        second: Tuple[str, bytes],
         instrument: str,
         cache: Dict[Tuple[str, str], int],
         correct_counter: List[bool],
         total_counter: List[bool],
         total_timings: List[float],
+        inserting: bool = False,
     ) -> Union[grpc_buffer.PlaintextLimitOrder, grpc_buffer.PlaintextMarketOrder]:
         """Compare two unencrypted items and return the smallest using the built in compare."""
+        start_time = time.time()
         if (
             self.time_limit is not None
             and time.time() - self.matcher_start_time >= self.time_limit
@@ -836,14 +910,13 @@ class MatchingEngine:
 
         first_identifier, first = first
         second_identifier, second = second
-        first, second = first.price, second.price
 
         _cache_result = self.is_cached(first_identifier, second_identifier, cache)
         # _cache_result = cache.get((first_identifier, second_identifier))
 
         # TODO: Perhaps something smarter, that can determine like a binary tree
         if _cache_result is not None:
-            return _cache_result
+            return _cache_result, 0
 
         def compare(first, second):
             """Compare two values unencrypted and return result."""
@@ -853,34 +926,53 @@ class MatchingEngine:
 
             return result, expected
 
-        start_compare = time.time()
         result, expected = compare(
             first,
             second,
         )
-        end_compare = time.time()
 
         cache["direct"][(first_identifier, second_identifier)] = result
         cache["direct"][(second_identifier, first_identifier)] = -1 * result
         cache["indirect"][first_identifier][result].append(second_identifier)
         cache["indirect"][second_identifier][-1 * result].append(first_identifier)
 
+        end_time = time.time()
+
+        if inserting:
+            self.book[instrument].add_metrics(
+                category="compare_insert",
+                section="local",
+                value={
+                    "timings": [end_time - start_time],
+                },
+            )
+        else:
+            self.book[instrument].add_metrics(
+                category="compare",
+                section="local",
+                value={
+                    "timings": [end_time - start_time],
+                },
+            )
+
         correct_counter.append(result == expected)
         total_counter.append(True)
-        total_timings.append(end_compare - start_compare)
-        return result
+        total_timings.append(end_time - start_time)
+        return result, 0
 
     def _compare_remote(
         self,
-        first: Tuple[str, grpc_buffer.PlaintextLimitOrder],
-        second: Tuple[str, grpc_buffer.PlaintextLimitOrder],
+        first: Tuple[str, bytes],
+        second: Tuple[str, bytes],
         instrument: str,
         cache: Dict[Tuple[str, str], int],
         correct_counter: List[bool],
         total_counter: List[bool],
         total_timings: List[float],
-    ) -> Union[grpc_buffer.PlaintextLimitOrder, grpc_buffer.PlaintextMarketOrder]:
+        inserting: bool = False,
+    ) -> Tuple[int, float]:
         """Compare two items and return the smallest using the remote intermediate."""
+        start_time = time.time()
         if (
             self.time_limit is not None
             and time.time() - self.matcher_start_time >= self.time_limit
@@ -889,14 +981,10 @@ class MatchingEngine:
 
         first_identifier, first = first
         second_identifier, second = second
-        first, second = first.price, second.price
 
         _cache_result = self.is_cached(first_identifier, second_identifier, cache)
-        # _cache_result = cache.get((first_identifier, second_identifier))
-
-        # TODO: Perhaps something smarter, that can determine like a binary tree
         if _cache_result is not None:
-            return _cache_result
+            return _cache_result, 0
 
         expected, challenges = generate_challenges(engine=None, n=self.challenge_count)
         index = randint(0, len(challenges) - 1) if len(challenges) > 0 else 0
@@ -905,11 +993,14 @@ class MatchingEngine:
             + [ChallengePlain(first=first, second=second)]
             + challenges[index:]
         )
-        start_time = time.time()
+
+        start_time_min = time.time()
         challenges = self._intermediate_channel.GetMinimumValuePlain(
             challenges=_challenges, instrument=instrument, encoding="float"
-        ).challenges
-        end_time = time.time()
+        )
+        challenges, duration = challenges.challenges, challenges.duration
+        end_time_min = time.time()
+        duration = end_time_min - start_time_min - duration
 
         results: List[int] = []
         for _index, challenge in enumerate(challenges):
@@ -930,31 +1021,81 @@ class MatchingEngine:
         cache["indirect"][first_identifier][result].append(second_identifier)
         cache["indirect"][second_identifier][-1 * result].append(first_identifier)
 
+        end_time = time.time()
+
+        if inserting:
+            self.book[instrument].add_metrics(
+                category="compare_insert",
+                section="remote",
+                value={
+                    "timings": [end_time - start_time],
+                },
+            )
+            self.book[instrument].add_metrics(
+                category="compare_insert",
+                section="remote_net",
+                value={
+                    "timings": [duration],
+                },
+            )
+            self.book[instrument].add_metrics(
+                category="minimum_insert",
+                section="value",
+                value={"timings": [end_time - start_time]},
+            )
+            self.book[instrument].add_metrics(
+                category="minimum_insert",
+                section="value_net",
+                value={"timings": [duration]},
+            )
+
+        else:
+            self.book[instrument].add_metrics(
+                category="compare",
+                section="remote",
+                value={
+                    "timings": [end_time - start_time],
+                },
+            )
+            self.book[instrument].add_metrics(
+                category="compare",
+                section="remote_net",
+                value={
+                    "timings": [duration],
+                },
+            )
+            self.book[instrument].add_metrics(
+                category="minimum",
+                section="value",
+                value={"timings": [end_time - start_time]},
+            )
+            self.book[instrument].add_metrics(
+                category="minimum",
+                section="value_net",
+                value={"timings": [duration]},
+            )
+
         correct_counter.append(result == expected)
         total_counter.append(True)
         total_timings.append(end_time - start_time)
-        return result
+        return result, duration
 
     def _compare_local_encrypted(
         self,
-        first: Tuple[
-            str,
-            Union[grpc_buffer.CiphertextLimitOrder, grpc_buffer.CiphertextMarketOrder],
-        ],
-        second: Tuple[
-            str,
-            Union[grpc_buffer.CiphertextLimitOrder, grpc_buffer.CiphertextMarketOrder],
-        ],
+        first: Tuple[str, bytes],
+        second: Tuple[str, bytes],
         instrument: str,
         cache: Dict[Tuple[str, str], int],
         correct_counter: List[bool],
         total_counter: List[bool],
         total_timings: List[float],
-    ) -> Union[grpc_buffer.CiphertextLimitOrder, grpc_buffer.CiphertextMarketOrder]:
+        inserting: bool = False,
+    ) -> Tuple[int, float]:
         """Compare two encrypted item and return the smallest using the local estimation.
         The identity of max(f, s) follows that:
         max(f, s) = ((f + s) / 2) + (abs(f - s) / 2) = ((f + s) / 2) + (sqrt((f - s)^2) / 2)
         """
+        start_time = time.time()
         if (
             self.time_limit is not None
             and time.time() - self.matcher_start_time >= self.time_limit
@@ -965,22 +1106,19 @@ class MatchingEngine:
 
         first_identifier, first = first
         second_identifier, second = second
-        first, second = crypto.from_bytes(ctxt=first.price), crypto.from_bytes(
-            ctxt=second.price
-        )
 
         _cache_result = self.is_cached(first_identifier, second_identifier, cache)
         # _cache_result = cache.get((first_identifier, second_identifier))
 
         # TODO: Perhaps something smarter, that can determine like a binary tree
         if _cache_result is not None:
-            return _cache_result
+            return _cache_result, 0
 
         def scale_down(value: PyCtxt, l: float, half: PyPtxt) -> PyCtxt:
             """Scales down the value to the range [0, 1] using a given value l
             _a = 0.5 + (a / 2 ** l)
             """
-            denom = crypto.encode_float(values=[1 / (2**l)])
+            denom = crypto.encode_float(values=[1 / (2 ** l)])
             crypto.encrypt_mult_plain_float(
                 ciphertext=value, value=denom, to_bytes=False, new_ctxt=False
             )
@@ -1009,8 +1147,8 @@ class MatchingEngine:
             # end for
             # return (x + 1) / 2
 
-            a = PyCtxt(copy_ctxt=first)
-            b = PyCtxt(copy_ctxt=second)
+            a = crypto.from_bytes(first)
+            b = crypto.from_bytes(second)
 
             crypto._depth_map[hash(a)] = 1
             crypto._depth_map[hash(b)] = 1
@@ -1117,9 +1255,36 @@ class MatchingEngine:
                 ]
                 + challenges[index:]
             )
+            start_time_min = time.time()
             challenges = self._intermediate_channel.GetMinimumValue(
                 challenges=_challenges, instrument=instrument, encoding="float"
-            ).challenges
+            )
+            end_time_min = time.time()
+            challenges, duration = challenges.challenges, challenges.duration
+            duration = end_time_min - start_time_min - duration
+
+            if inserting:
+                self.book[instrument].add_metrics(
+                    category="minimum_insert",
+                    section="value",
+                    value={"timings": [end_time_min - start_time_min]},
+                )
+                self.book[instrument].add_metrics(
+                    category="minimum_insert",
+                    section="value_net",
+                    value={"timings": [duration]},
+                )
+            else:
+                self.book[instrument].add_metrics(
+                    category="minimum",
+                    section="value",
+                    value={"timings": [end_time_min - start_time_min]},
+                )
+                self.book[instrument].add_metrics(
+                    category="minimum",
+                    section="value_net",
+                    value={"timings": [duration]},
+                )
 
             results: List[int] = []
             for _index, challenge in enumerate(challenges):
@@ -1142,34 +1307,68 @@ class MatchingEngine:
             cache["indirect"][first_identifier][result].append(second_identifier)
             cache["indirect"][second_identifier][-1 * result].append(first_identifier)
 
-            return result, expected
+            return result, expected, duration
 
-        start_compare = time.time()
-        result, expected = compare(
+        result, expected, duration = compare(
             first,
             second,
             iterations=self.compare_iterations,
             sigmoid_iterations=self.compare_sigmoid_iterations,
             constant_count=self.compare_constant_count,
         )
-        end_compare = time.time()
+        end_time = time.time()
+
+        if inserting:
+            self.book[instrument].add_metrics(
+                category="compare_insert",
+                section="local",
+                value={
+                    "timings": [end_time - start_time],
+                },
+            )
+
+            self.book[instrument].add_metrics(
+                category="compare_insert",
+                section="local_net",
+                value={
+                    "timings": [duration],
+                },
+            )
+        else:
+            self.book[instrument].add_metrics(
+                category="compare",
+                section="local",
+                value={
+                    "timings": [end_time - start_time],
+                },
+            )
+
+            self.book[instrument].add_metrics(
+                category="compare",
+                section="local_net",
+                value={
+                    "timings": [duration],
+                },
+            )
 
         correct_counter.append(result == expected)
         total_counter.append(True)
-        total_timings.append(end_compare - start_compare)
-        return result
+        total_timings.append(end_time - start_time)
+        return result, duration
 
     def _compare_remote_encrypted(
         self,
-        first: Tuple[str, grpc_buffer.CiphertextLimitOrder],
-        second: Tuple[str, grpc_buffer.CiphertextLimitOrder],
+        first: Tuple[str, bytes],
+        second: Tuple[str, bytes],
         instrument: str,
         cache: Dict[Tuple[str, str], int],
         correct_counter: List[bool],
         total_counter: List[bool],
         total_timings: List[float],
-    ) -> Union[grpc_buffer.CiphertextLimitOrder, grpc_buffer.CiphertextMarketOrder]:
+        inserting: bool = False,
+    ) -> Tuple[int, float]:
         """Compare two encrypted item and return the smallest using the remote intermediate."""
+        start_time = time.time()
         if (
             self.time_limit is not None
             and time.time() - self.matcher_start_time >= self.time_limit
@@ -1180,16 +1379,13 @@ class MatchingEngine:
 
         first_identifier, first = first
         second_identifier, second = second
-        first, second = crypto.from_bytes(ctxt=first.price), crypto.from_bytes(
-            ctxt=second.price
-        )
 
         _cache_result = self.is_cached(first_identifier, second_identifier, cache)
         # _cache_result = cache.get((first_identifier, second_identifier))
 
         # TODO: Perhaps something smarter, that can determine like a binary tree
         if _cache_result is not None:
-            return _cache_result
+            return _cache_result, 0
 
         expected, challenges = generate_challenges(
             engine=crypto, n=self.challenge_count
@@ -1199,17 +1395,19 @@ class MatchingEngine:
             challenges[:index]
             + [
                 Challenge(
-                    first=crypto.to_bytes(ctxt=first),
-                    second=crypto.to_bytes(ctxt=second),
+                    first=first,
+                    second=second,
                 )
             ]
             + challenges[index:]
         )
-        start_time = time.time()
+        start_time_min = time.time()
         challenges = self._intermediate_channel.GetMinimumValue(
             challenges=_challenges, instrument=instrument, encoding="float"
-        ).challenges
-        end_time = time.time()
+        )
+        end_time_min = time.time()
+        challenges, duration = challenges.challenges, challenges.duration
+        duration = end_time_min - start_time_min - duration
 
         results: List[int] = []
         for _index, challenge in enumerate(challenges):
@@ -1237,9 +1435,62 @@ class MatchingEngine:
         cache["indirect"][first_identifier][result].append(second_identifier)
         cache["indirect"][second_identifier][-1 * result].append(first_identifier)
 
+        end_time = time.time()
+
+        if inserting:
+            self.book[instrument].add_metrics(
+                category="compare_insert",
+                section="remote",
+                value={
+                    "timings": [end_time - start_time],
+                },
+            )
+            self.book[instrument].add_metrics(
+                category="compare_insert",
+                section="remote_net",
+                value={
+                    "timings": [duration],
+                },
+            )
+            self.book[instrument].add_metrics(
+                category="minimum_insert",
+                section="value",
+                value={"timings": [end_time - start_time]},
+            )
+            self.book[instrument].add_metrics(
+                category="minimum_insert",
+                section="value_net",
+                value={"timings": [duration]},
+            )
+        else:
+            self.book[instrument].add_metrics(
+                category="compare",
+                section="remote",
+                value={
+                    "timings": [end_time - start_time],
+                },
+            )
+            self.book[instrument].add_metrics(
+                category="compare",
+                section="remote_net",
+                value={
+                    "timings": [duration],
+                },
+            )
+            self.book[instrument].add_metrics(
+                category="minimum",
+                section="value",
+                value={"timings": [end_time - start_time]},
+            )
+            self.book[instrument].add_metrics(
+                category="minimum",
+                section="value_net",
+                value={"timings": [duration]},
+            )
+
         total_counter.append(True)
         total_timings.append(end_time - start_time)
-        return result
+        return result, duration
 
     def is_cached(
         self, first: str, second: str, cache: Dict[str, Any]
@@ -1313,7 +1564,6 @@ class MatchingEngine:
             cache["indirect"][first][result].append(second)
             cache["indirect"][second][-1 * result].append(first)
 
-            logger.warning("HERE")
         return result
 
     def match(
@@ -1324,6 +1574,7 @@ class MatchingEngine:
         """Continously match incoming orders against each other
         Runs the sub matchers _match and _match_plaintext depending on if the orders are encrypted
         """
+        self.matcher_start_time = None
         with ThreadPoolExecutor(max_workers=10) as pool:
             while True:
                 try:
@@ -1332,6 +1583,9 @@ class MatchingEngine:
                         bids = self._cache_bid.setdefault(instrument, 0)
                         asks = self._cache_ask.setdefault(instrument, 0)
                         if bids != book.bid_count or asks != book.ask_count:
+                            if self.matcher_start_time is None:
+                                self.matcher_start_time = time.time()
+
                             self._cache_bid[instrument] = book.bid_count
                             self._cache_ask[instrument] = book.ask_count
                             future_to_match[
